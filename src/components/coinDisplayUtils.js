@@ -25,6 +25,7 @@ export function formatPrice(value) {
 export function parsePatternSummary(patterns) {
   const result = {
     harmonic: null,
+    harmonics: [],
     wBottom: null,
     mTop: null,
     triangle: null,
@@ -37,7 +38,12 @@ export function parsePatternSummary(patterns) {
 
     if (pattern.startsWith('harmonic:')) {
       const [, type, direction] = pattern.split(':');
-      result.harmonic = { type, direction };
+      const nextPattern = { type, direction };
+      result.harmonics.push(nextPattern);
+
+      if (!result.harmonic) {
+        result.harmonic = nextPattern;
+      }
     }
 
     if (pattern === 'w_bottom') {

@@ -169,6 +169,7 @@ export function scoreBucket(score: number) {
 
 const HARMONIC_RATIO_TOLERANCE = 0.08;
 const DEFAULT_HARMONIC_MIN_CONFIDENCE = 0.7;
+const DEFAULT_HARMONIC_MAX_PATTERNS = 3;
 const HARMONIC_SPECS = [
   { key: 'gartley', xab: [0.618, 0.618], abc: [0.382, 0.886], bcd: [1.13, 1.618], xad: [0.786, 0.786] },
   { key: 'bat', xab: [0.382, 0.5], abc: [0.382, 0.886], bcd: [1.618, 2.618], xad: [0.886, 0.886] },
@@ -417,17 +418,19 @@ function buildHarmonicCandidate(points: Array<SwingPoint & { type: 'high' | 'low
       key: spec.key,
       direction,
       confidence: fitScore + (reactionConfirmed ? 0.08 : 0),
+      dIndex: d.index,
     });
   });
 
   return candidates.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
-function detectHarmonicPattern(
+function detectHarmonicPatterns(
   swingHighs: SwingPoint[],
   swingLows: SwingPoint[],
   candles: Candle[],
   minConfidence = DEFAULT_HARMONIC_MIN_CONFIDENCE,
+  maxPatterns = DEFAULT_HARMONIC_MAX_PATTERNS,
 ) {
   const mergedSwings = mergeSwingSequence(swingHighs, swingLows);
   const candidates: Array<{ key: string; direction: 'bullish' | 'bearish'; confidence: number; dIndex: number }> = [];
@@ -436,24 +439,43 @@ function detectHarmonicPattern(
     const match = buildHarmonicCandidate(mergedSwings.slice(index, index + 5), candles);
 
     if (match) {
-      candidates.push({ ...match, dIndex: mergedSwings[index + 4].index });
+      candidates.push(match);
     }
   }
 
-  const bestCandidate =
-    candidates.sort((left, right) => {
+  const deduped: Array<{ key: string; direction: 'bullish' | 'bearish'; confidence: number; dIndex: number }> = [];
+  const seen = new Set<string>();
+
+  candidates
+    .filter((candidate) => candidate.confidence >= minConfidence)
+    .sort((left, right) => {
       if (right.confidence !== left.confidence) {
         return right.confidence - left.confidence;
       }
 
       return right.dIndex - left.dIndex;
-    })[0] ?? null;
+    })
+    .forEach((candidate) => {
+      const dedupeKey = `${candidate.key}:${candidate.direction}:${candidate.dIndex}`;
 
-  if (!bestCandidate || bestCandidate.confidence < minConfidence) {
-    return null;
-  }
+      if (seen.has(dedupeKey) || deduped.length >= maxPatterns) {
+        return;
+      }
 
-  return bestCandidate;
+      seen.add(dedupeKey);
+      deduped.push(candidate);
+    });
+
+  return deduped;
+}
+
+function detectHarmonicPattern(
+  swingHighs: SwingPoint[],
+  swingLows: SwingPoint[],
+  candles: Candle[],
+  minConfidence = DEFAULT_HARMONIC_MIN_CONFIDENCE,
+) {
+  return detectHarmonicPatterns(swingHighs, swingLows, candles, minConfidence, 1)[0] ?? null;
 }
 
 function detectWBottom(swingHighs: SwingPoint[], swingLows: SwingPoint[], candles: Candle[], tolerance = 0.02) {
@@ -512,10 +534,12 @@ function detectMTop(swingHighs: SwingPoint[], swingLows: SwingPoint[], candles: 
 
 export function detectAllPatterns(candles: Candle[]) {
   const { swingHighs, swingLows } = findSwingPoints(candles, 3);
+  const harmonics = detectHarmonicPatterns(swingHighs, swingLows, candles);
   return {
     supportResistance: detectSupportResistance(swingHighs, swingLows),
     triangle: detectTriangle(swingHighs, swingLows, candles.length),
-    harmonic: detectHarmonicPattern(swingHighs, swingLows, candles),
+    harmonics,
+    harmonic: harmonics[0] ?? null,
     wBottom: detectWBottom(swingHighs, swingLows, candles),
     mTop: detectMTop(swingHighs, swingLows, candles),
   };
@@ -524,7 +548,8 @@ export function detectAllPatterns(candles: Candle[]) {
 export function summarizePatterns(patterns: ReturnType<typeof detectAllPatterns>) {
   const values: string[] = [];
   if (patterns.triangle) values.push(`triangle:${patterns.triangle.type}`);
-  if (patterns.harmonic) values.push(`harmonic:${patterns.harmonic.key}:${patterns.harmonic.direction}`);
+  const harmonicPatterns = patterns.harmonics?.length ? patterns.harmonics : patterns.harmonic ? [patterns.harmonic] : [];
+  harmonicPatterns.slice(0, 2).forEach((pattern) => values.push(`harmonic:${pattern.key}:${pattern.direction}`));
   if (patterns.wBottom) values.push('w_bottom');
   if (patterns.mTop) values.push('m_top');
   patterns.supportResistance.slice(0, 2).forEach((level) => values.push(`${level.type}:${level.touches}`));

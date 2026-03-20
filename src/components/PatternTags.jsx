@@ -67,9 +67,16 @@ function fromPatternObject(patterns) {
     values.push(`triangle:${patterns.triangle.type}`);
   }
 
-  if (patterns?.harmonic) {
-    values.push(`harmonic:${patterns.harmonic.key}:${patterns.harmonic.direction}`);
-  }
+  const harmonics =
+    patterns?.harmonics?.length
+      ? patterns.harmonics
+      : patterns?.harmonic
+        ? [patterns.harmonic]
+        : [];
+
+  harmonics.slice(0, 2).forEach((pattern) => {
+    values.push(`harmonic:${pattern.key}:${pattern.direction}`);
+  });
 
   if (patterns?.wBottom) {
     values.push('w_bottom');

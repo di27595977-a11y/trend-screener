@@ -24,6 +24,7 @@ const COPY = {
   patternEmpty: '\u7d14\u8da8\u52e2',
   toggles: '\u986f\u793a\u958b\u95dc',
   harmonicRatios: '\u8ae7\u6ce2\u6bd4\u7387',
+  harmonicList: '\u8ae7\u6ce2\u7d50\u69cb\u6e05\u55ae',
   confidence: '\u53ef\u4fe1\u5ea6',
   actualRatio: '\u5be6\u969b\u6bd4\u7387',
   targetRange: '\u7406\u60f3\u7bc4\u570d',
@@ -153,6 +154,34 @@ function formatHarmonicDirection(direction) {
   return direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
 }
 
+function formatHarmonicBias(direction) {
+  return direction === 'bullish' ? '\u770b\u6f32' : '\u770b\u8dcc';
+}
+
+function formatHarmonicStatusLabel(statusKey) {
+  return (
+    {
+      forming: '\u5f62\u6210\u4e2d',
+      confirmed: '\u5df2\u78ba\u8a8d',
+      tp1_hit: '\u6b62\u76c81',
+      tp2_hit: '\u6b62\u76c8',
+      sl_hit: '\u6b62\u640d',
+    }[statusKey] || '\u89c0\u5bdf\u4e2d'
+  );
+}
+
+function harmonicStatusTone(statusKey) {
+  return (
+    {
+      forming: 'border-slate-400/20 bg-slate-400/10 text-slate-100',
+      confirmed: 'border-sky-400/25 bg-sky-400/10 text-sky-100',
+      tp1_hit: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100',
+      tp2_hit: 'border-emerald-400/30 bg-emerald-400/12 text-emerald-50',
+      sl_hit: 'border-rose-400/25 bg-rose-400/10 text-rose-100',
+    }[statusKey] || 'border-slate-400/20 bg-slate-400/10 text-slate-100'
+  );
+}
+
 function fallbackOverview(candles) {
   const recent = candles.slice(-24);
   const metrics = evaluateTrend(recent);
@@ -186,22 +215,27 @@ function buildTriangleSummary(patterns) {
 }
 
 function buildHarmonicSummary(patterns) {
-  if (!patterns?.harmonic) {
+  const pattern = patterns?.harmonics?.[0] || patterns?.harmonic;
+
+  if (!pattern) {
     return COPY.noHarmonic;
   }
 
-  const directionLabel = formatHarmonicDirection(patterns.harmonic.direction);
-  const targetText = patterns.harmonic.target1
-    ? `${COPY.target1} ${formatPrice(patterns.harmonic.target1)} / ${COPY.target2} ${formatPrice(patterns.harmonic.target2)}`
+  const directionLabel = formatHarmonicDirection(pattern.direction);
+  const targetText = pattern.target1
+    ? `${COPY.target1} ${formatPrice(pattern.target1)} / ${COPY.target2} ${formatPrice(pattern.target2)}`
     : '\u5148\u89c0\u5bdf PRZ \u5340\u57df\u53cd\u61c9';
-  const confirmationText = patterns.harmonic.reactionConfirmed
-    ? '\u76ee\u524d\u5df2\u7d93\u958b\u59cb\u51fa\u73fe\u53cd\u61c9\u3002'
-    : '\u76ee\u524d\u9084\u5728\u5b8c\u6210\u5340\u9644\u8fd1\uff0c\u53ef\u4ee5\u7b49\u5f85\u53cd\u8f49\u78ba\u8a8d\u3002';
+  const confirmationText =
+    pattern.status?.key === 'sl_hit'
+      ? '\u9019\u7d44\u7d50\u69cb\u5df2\u7d93\u7834\u58de\uff0c\u4e0d\u5efa\u8b70\u518d\u7576\u6210\u65b0\u9032\u5834\u4f9d\u64da\u3002'
+      : pattern.reactionConfirmed
+        ? '\u76ee\u524d\u5df2\u7d93\u958b\u59cb\u51fa\u73fe\u53cd\u61c9\u3002'
+        : '\u76ee\u524d\u9084\u5728\u5b8c\u6210\u5340\u9644\u8fd1\uff0c\u53ef\u4ee5\u7b49\u5f85\u53cd\u8f49\u78ba\u8a8d\u3002';
 
-  return `${patterns.harmonic.label} ${directionLabel}\uff0c${COPY.przZone} ${formatPriceRange(patterns.harmonic.przRange)}\uff0c${COPY.stopLoss} ${formatPrice(
-    patterns.harmonic.stopLoss,
+  return `${pattern.label} ${directionLabel}\uff0c${COPY.przZone} ${formatPriceRange(pattern.przRange)}\uff0c${COPY.stopLoss} ${formatPrice(
+    pattern.stopLoss,
   )}\uff0c${COPY.confidence} ${Math.round(
-    patterns.harmonic.confidence * 100,
+    pattern.confidence * 100,
   )}%\uff0c${targetText}\u3002${confirmationText}`;
 }
 
@@ -216,6 +250,23 @@ function buildHarmonicRatioRows(pattern) {
     ['BCD', pattern.ratios?.bcd, pattern.ratioTargets?.bcd],
     ['XAD', pattern.ratios?.xad, pattern.ratioTargets?.xad],
   ];
+}
+
+function getDisplayHarmonics(patterns) {
+  if (!patterns) {
+    return [];
+  }
+
+  if (patterns.harmonics?.length) {
+    return patterns.harmonics;
+  }
+
+  return patterns.harmonic ? [patterns.harmonic] : [];
+}
+
+function getAdvisorHarmonic(patterns) {
+  const harmonics = getDisplayHarmonics(patterns);
+  return harmonics.find((pattern) => ['forming', 'confirmed'].includes(pattern.status?.key)) || null;
 }
 
 function buildReversalSummary(patterns) {
@@ -252,6 +303,8 @@ function buildTradeLevels(patterns) {
 }
 
 function buildAdvisorPatterns(patterns) {
+  const harmonicPattern = getAdvisorHarmonic(patterns);
+
   if (!patterns) {
     return {
       harmonic: null,
@@ -262,16 +315,16 @@ function buildAdvisorPatterns(patterns) {
   }
 
   return {
-    harmonic: patterns.harmonic
+    harmonic: harmonicPattern
       ? {
-          type: patterns.harmonic.key,
-          direction: patterns.harmonic.direction,
-          prz: patterns.harmonic.przRange,
-          stopLoss: patterns.harmonic.stopLoss,
-          t1: patterns.harmonic.target1,
-          t2: patterns.harmonic.target2,
-          confidence: patterns.harmonic.confidence,
-          reactionConfirmed: patterns.harmonic.reactionConfirmed,
+          type: harmonicPattern.key,
+          direction: harmonicPattern.direction,
+          prz: harmonicPattern.przRange,
+          stopLoss: harmonicPattern.stopLoss,
+          t1: harmonicPattern.target1,
+          t2: harmonicPattern.target2,
+          confidence: harmonicPattern.confidence,
+          reactionConfirmed: harmonicPattern.reactionConfirmed,
         }
       : null,
     wBottom: patterns.wBottom ? { neckline: patterns.wBottom.necklinePrice } : null,
@@ -459,6 +512,7 @@ export default function ChartDetail() {
       supportResistance: toggles.supportResistance ? patterns.supportResistance : [],
       triangle: toggles.triangle ? patterns.triangle : null,
       harmonic: toggles.harmonic ? patterns.harmonic : null,
+      harmonics: toggles.harmonic ? getDisplayHarmonics(patterns) : [],
       wBottom: toggles.reversals ? patterns.wBottom : null,
       mTop: toggles.reversals ? patterns.mTop : null,
       swingPoints: toggles.swingPoints ? patterns.swingPoints : null,
@@ -625,49 +679,66 @@ export default function ChartDetail() {
             </div>
           </section>
 
-          {patterns?.harmonic && (
+          {getDisplayHarmonics(patterns).length > 0 && (
             <section className="panel rounded-[28px] px-5 py-5">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.harmonicRatios}</p>
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.harmonicList}</p>
                 <span className="rounded-full border border-sky-400/25 bg-sky-400/10 px-3 py-1 font-mono text-xs text-sky-100">
-                  {`${COPY.confidence} ${Math.round(patterns.harmonic.confidence * 100)}%`}
+                  {`${getDisplayHarmonics(patterns).length} \u7d44\u8ae7\u6ce2`}
                 </span>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                <p className="font-medium text-white">{`${patterns.harmonic.label} ${formatHarmonicDirection(patterns.harmonic.direction)}`}</p>
-                <p className="mt-1 text-sm text-slate-300">
-                  {`${COPY.przZone} ${formatPriceRange(patterns.harmonic.przRange)} \u00b7 ${COPY.stopLoss} ${formatPrice(
-                    patterns.harmonic.stopLoss,
-                  )} \u00b7 ${patterns.harmonic.reactionConfirmed ? '\u5df2\u958b\u59cb\u53cd\u61c9' : '\u7b49\u5f85\u53cd\u61c9'}`}
-                </p>
-              </div>
+              <div className="mt-4 space-y-3">
+                {getDisplayHarmonics(patterns).map((harmonicPattern) => (
+                  <div key={`${harmonicPattern.key}-${harmonicPattern.direction}-${harmonicPattern.d?.index || harmonicPattern.przPrice}`} className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-white/10 bg-slate-950/55 px-3 py-1 text-xs text-slate-100">
+                            {`${formatHarmonicBias(harmonicPattern.direction)} ${harmonicPattern.label}`}
+                          </span>
+                          <span
+                            className={`rounded-full border px-3 py-1 text-xs ${harmonicStatusTone(harmonicPattern.status?.key)}`}
+                          >
+                            {formatHarmonicStatusLabel(harmonicPattern.status?.key)}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm text-slate-300">
+                          {`${COPY.przZone} ${formatPriceRange(harmonicPattern.przRange)} \u00b7 ${COPY.stopLoss} ${formatPrice(
+                            harmonicPattern.stopLoss,
+                          )} \u00b7 ${COPY.confidence} ${Math.round(harmonicPattern.confidence * 100)}%`}
+                        </p>
+                      </div>
 
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.target1}</p>
-                  <p className="mt-1 font-mono text-white">{formatPrice(patterns.harmonic.target1)}</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.target2}</p>
-                  <p className="mt-1 font-mono text-white">{formatPrice(patterns.harmonic.target2)}</p>
-                </div>
-              </div>
-
-              <div className="mt-3 space-y-2">
-                {buildHarmonicRatioRows(patterns.harmonic).map(([label, actual, target]) => (
-                  <div
-                    key={label}
-                    className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm sm:grid-cols-[64px_minmax(0,1fr)_minmax(0,1fr)] sm:items-center"
-                  >
-                    <span className="font-mono text-white">{label}</span>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.actualRatio}</p>
-                      <p className="mt-1 font-mono text-slate-100">{formatRatio(actual)}</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-slate-950/35 px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.target1}</p>
+                          <p className="mt-1 font-mono text-white">{formatPrice(harmonicPattern.target1)}</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-slate-950/35 px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.target2}</p>
+                          <p className="mt-1 font-mono text-white">{formatPrice(harmonicPattern.target2)}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.targetRange}</p>
-                      <p className="mt-1 font-mono text-slate-100">{formatRatioTarget(target)}</p>
+
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {buildHarmonicRatioRows(harmonicPattern).map(([label, actual, target]) => (
+                        <div
+                          key={`${harmonicPattern.key}-${harmonicPattern.direction}-${label}`}
+                          className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3 text-sm sm:grid-cols-[64px_minmax(0,1fr)_minmax(0,1fr)] sm:items-center"
+                        >
+                          <span className="font-mono text-white">{label}</span>
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.actualRatio}</p>
+                            <p className="mt-1 font-mono text-slate-100">{formatRatio(actual)}</p>
+                          </div>
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.targetRange}</p>
+                            <p className="mt-1 font-mono text-slate-100">{formatRatioTarget(target)}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}

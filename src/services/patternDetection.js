@@ -1,5 +1,6 @@
 const HARMONIC_RATIO_TOLERANCE = 0.08;
 const DEFAULT_HARMONIC_MIN_CONFIDENCE = 0.7;
+const DEFAULT_HARMONIC_MAX_PATTERNS = 3;
 
 const HARMONIC_SPECS = [
   {
@@ -159,6 +160,73 @@ function nearestValue(values, target) {
   return [...values].sort((left, right) => Math.abs(left - target) - Math.abs(right - target))[0];
 }
 
+function getHarmonicStatus(direction, dPoint, levels, candles) {
+  const followThrough = candles.slice(dPoint.index + 1);
+  let reactionConfirmed = false;
+  let firstTrigger = 'forming';
+
+  for (const candle of followThrough) {
+    if (direction === 'bullish') {
+      if (candle.low <= levels.stopLoss) {
+        firstTrigger = 'sl_hit';
+        break;
+      }
+
+      if (candle.high >= levels.target2) {
+        reactionConfirmed = true;
+        firstTrigger = 'tp2_hit';
+        break;
+      }
+
+      if (candle.high >= levels.target1) {
+        reactionConfirmed = true;
+        firstTrigger = 'tp1_hit';
+        break;
+      }
+
+      if (candle.close > dPoint.price) {
+        reactionConfirmed = true;
+        firstTrigger = 'confirmed';
+      }
+    } else {
+      if (candle.high >= levels.stopLoss) {
+        firstTrigger = 'sl_hit';
+        break;
+      }
+
+      if (candle.low <= levels.target2) {
+        reactionConfirmed = true;
+        firstTrigger = 'tp2_hit';
+        break;
+      }
+
+      if (candle.low <= levels.target1) {
+        reactionConfirmed = true;
+        firstTrigger = 'tp1_hit';
+        break;
+      }
+
+      if (candle.close < dPoint.price) {
+        reactionConfirmed = true;
+        firstTrigger = 'confirmed';
+      }
+    }
+  }
+
+  const statusMap = {
+    forming: { key: 'forming', label: '形成中', shortLabel: '形成中', tone: 'neutral' },
+    confirmed: { key: 'confirmed', label: '反應確認', shortLabel: '確認', tone: 'info' },
+    tp1_hit: { key: 'tp1_hit', label: '止盈一', shortLabel: '止盈1', tone: 'success' },
+    tp2_hit: { key: 'tp2_hit', label: '止盈完成', shortLabel: '止盈', tone: 'success' },
+    sl_hit: { key: 'sl_hit', label: '停損失效', shortLabel: '止損', tone: 'danger' },
+  };
+
+  return {
+    ...statusMap[firstTrigger],
+    reactionConfirmed,
+  };
+}
+
 function projectHarmonicLevels(spec, direction, points) {
   const { x, a, b, c, d } = points;
   const xa = Math.abs(a.price - x.price);
@@ -238,8 +306,6 @@ function buildHarmonicCandidate(points, candles) {
     xad: xad / xa,
   };
 
-  const lastClose = candles.at(-1)?.close ?? d.price;
-  const reactionConfirmed = direction === 'bullish' ? lastClose > d.price : lastClose < d.price;
   const candidates = [];
 
   HARMONIC_SPECS.forEach((spec) => {
@@ -259,6 +325,7 @@ function buildHarmonicCandidate(points, candles) {
         scoreRangeFit(ratios.xad, spec.xad)) /
       4;
     const levels = projectHarmonicLevels(spec, direction, { x, a, b, c, d });
+    const status = getHarmonicStatus(direction, d, levels, candles);
 
     candidates.push({
       type: 'harmonic',
@@ -281,8 +348,9 @@ function buildHarmonicCandidate(points, candles) {
         xad: levels.xadRange,
         bcd: levels.bcdRange,
       },
-      confidence: fitScore + (reactionConfirmed ? 0.08 : 0),
-      reactionConfirmed,
+      confidence: fitScore + (status.reactionConfirmed ? 0.08 : 0),
+      reactionConfirmed: status.reactionConfirmed,
+      status,
       przPrice: d.price,
       przRange: levels.przRange,
       stopLoss: levels.stopLoss,
@@ -468,7 +536,15 @@ export function detectMTop(swingHighs, swingLows, candles, tolerance = 0.02) {
   return patterns.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
-export function detectHarmonicPattern(swingHighs, swingLows, candles, minConfidence = DEFAULT_HARMONIC_MIN_CONFIDENCE) {
+export function detectHarmonicPatterns(
+  swingHighs,
+  swingLows,
+  candles,
+  {
+    minConfidence = DEFAULT_HARMONIC_MIN_CONFIDENCE,
+    maxPatterns = DEFAULT_HARMONIC_MAX_PATTERNS,
+  } = {},
+) {
   const mergedSwings = mergeSwingSequence(swingHighs, swingLows);
   const candidates = [];
 
@@ -480,20 +556,54 @@ export function detectHarmonicPattern(swingHighs, swingLows, candles, minConfide
     }
   }
 
-  const bestCandidate =
-    candidates.sort((left, right) => {
+  const deduped = [];
+  const seen = new Set();
+
+  candidates
+    .filter((candidate) => candidate.confidence >= minConfidence)
+    .sort((left, right) => {
+      const statusPriority = {
+        confirmed: 5,
+        forming: 4,
+        tp1_hit: 3,
+        tp2_hit: 2,
+        sl_hit: 1,
+      };
+
+      const leftStatus = statusPriority[left.status?.key] || 0;
+      const rightStatus = statusPriority[right.status?.key] || 0;
+
+      if (rightStatus !== leftStatus) {
+        return rightStatus - leftStatus;
+      }
+
       if (right.confidence !== left.confidence) {
         return right.confidence - left.confidence;
       }
 
       return (right.d?.index ?? 0) - (left.d?.index ?? 0);
-    })[0] ?? null;
+    })
+    .forEach((candidate) => {
+      const dedupeKey = `${candidate.key}:${candidate.direction}:${candidate.d?.index ?? 'na'}`;
 
-  if (!bestCandidate || bestCandidate.confidence < minConfidence) {
-    return null;
-  }
+      if (seen.has(dedupeKey) || deduped.length >= maxPatterns) {
+        return;
+      }
 
-  return bestCandidate;
+      seen.add(dedupeKey);
+      deduped.push(candidate);
+    });
+
+  return deduped;
+}
+
+export function detectHarmonicPattern(swingHighs, swingLows, candles, minConfidence = DEFAULT_HARMONIC_MIN_CONFIDENCE) {
+  return (
+    detectHarmonicPatterns(swingHighs, swingLows, candles, {
+      minConfidence,
+      maxPatterns: 1,
+    })[0] ?? null
+  );
 }
 
 export function detectAllPatterns(candles, options = {}) {
@@ -501,12 +611,18 @@ export function detectAllPatterns(candles, options = {}) {
   const tolerance = options.tolerance ?? 0.005;
   const reversalTolerance = options.reversalTolerance ?? 0.02;
   const minHarmonicConfidence = options.minHarmonicConfidence ?? DEFAULT_HARMONIC_MIN_CONFIDENCE;
+  const maxHarmonicPatterns = options.maxHarmonicPatterns ?? DEFAULT_HARMONIC_MAX_PATTERNS;
   const { swingHighs, swingLows } = findSwingPoints(candles, lookback);
+  const harmonics = detectHarmonicPatterns(swingHighs, swingLows, candles, {
+    minConfidence: minHarmonicConfidence,
+    maxPatterns: maxHarmonicPatterns,
+  });
 
   return {
     supportResistance: detectSupportResistance(swingHighs, swingLows, tolerance),
     triangle: detectTriangle(swingHighs, swingLows, candles.length),
-    harmonic: detectHarmonicPattern(swingHighs, swingLows, candles, minHarmonicConfidence),
+    harmonics,
+    harmonic: harmonics[0] ?? null,
     wBottom: detectWBottom(swingHighs, swingLows, candles, reversalTolerance),
     mTop: detectMTop(swingHighs, swingLows, candles, reversalTolerance),
     swingPoints: { swingHighs, swingLows },
@@ -524,9 +640,16 @@ export function summarizePatterns(patterns) {
     summary.push(`triangle:${patterns.triangle.type}`);
   }
 
-  if (patterns.harmonic) {
-    summary.push(`harmonic:${patterns.harmonic.key}:${patterns.harmonic.direction}`);
-  }
+  const harmonicPatterns =
+    patterns.harmonics?.length
+      ? patterns.harmonics
+      : patterns.harmonic
+        ? [patterns.harmonic]
+        : [];
+
+  harmonicPatterns.slice(0, 2).forEach((pattern) => {
+    summary.push(`harmonic:${pattern.key}:${pattern.direction}`);
+  });
 
   if (patterns.wBottom) {
     summary.push('w_bottom');

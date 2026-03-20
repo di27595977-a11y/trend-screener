@@ -18,6 +18,8 @@ function buildTradeLevels(patterns) {
 }
 
 function buildAdvisorPatterns(patterns) {
+  const harmonicPattern = patterns?.harmonics?.find((pattern) => ['forming', 'confirmed'].includes(pattern.status?.key)) || null;
+
   if (!patterns) {
     return {
       harmonic: null,
@@ -28,16 +30,16 @@ function buildAdvisorPatterns(patterns) {
   }
 
   return {
-    harmonic: patterns.harmonic
+    harmonic: harmonicPattern
       ? {
-          type: patterns.harmonic.key,
-          direction: patterns.harmonic.direction,
-          prz: patterns.harmonic.przRange,
-          stopLoss: patterns.harmonic.stopLoss,
-          t1: patterns.harmonic.target1,
-          t2: patterns.harmonic.target2,
-          confidence: patterns.harmonic.confidence,
-          reactionConfirmed: patterns.harmonic.reactionConfirmed,
+          type: harmonicPattern.key,
+          direction: harmonicPattern.direction,
+          prz: harmonicPattern.przRange,
+          stopLoss: harmonicPattern.stopLoss,
+          t1: harmonicPattern.target1,
+          t2: harmonicPattern.target2,
+          confidence: harmonicPattern.confidence,
+          reactionConfirmed: harmonicPattern.reactionConfirmed,
         }
       : null,
     wBottom: patterns.wBottom ? { neckline: patterns.wBottom.necklinePrice } : null,

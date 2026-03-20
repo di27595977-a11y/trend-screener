@@ -4,6 +4,61 @@ const TRIANGLE_LABELS = {
   symmetric: '\u25c7 \u5c0d\u7a31\u4e09\u89d2',
 };
 
+const HARMONIC_PALETTES = {
+  bullish: [
+    {
+      line: '#60a5fa',
+      lineSoft: '#60a5fa88',
+      fill: '#60a5fa1f',
+      chipBg: '#2563ebdd',
+      chipBorder: '#93c5fd',
+      text: '#dbeafe',
+      ratio: '#93c5fd',
+      target1: '#67e8f9aa',
+      target2: '#bae6fdaa',
+      stop: '#f8717188',
+    },
+    {
+      line: '#38bdf8',
+      lineSoft: '#38bdf888',
+      fill: '#38bdf81a',
+      chipBg: '#0284c7dd',
+      chipBorder: '#7dd3fc',
+      text: '#e0f2fe',
+      ratio: '#7dd3fc',
+      target1: '#5eead4aa',
+      target2: '#99f6e4aa',
+      stop: '#fb718588',
+    },
+  ],
+  bearish: [
+    {
+      line: '#f59e0b',
+      lineSoft: '#f59e0b88',
+      fill: '#f59e0b1f',
+      chipBg: '#f59e0bdd',
+      chipBorder: '#fde68a',
+      text: '#fff7ed',
+      ratio: '#fcd34d',
+      target1: '#fb718588',
+      target2: '#fda4af88',
+      stop: '#93c5fd88',
+    },
+    {
+      line: '#fb7185',
+      lineSoft: '#fb718588',
+      fill: '#fb71851c',
+      chipBg: '#e11d48dd',
+      chipBorder: '#fda4af',
+      text: '#fff1f2',
+      ratio: '#fda4af',
+      target1: '#fb718588',
+      target2: '#fecdd388',
+      stop: '#93c5fd88',
+    },
+  ],
+};
+
 class PatternRenderer {
   constructor(chart, candleSeries) {
     this.chart = chart;
@@ -78,14 +133,42 @@ class PatternRenderer {
     this.render();
   }
 
-  drawText(text, x, y, color) {
-    if (!this.ctx) {
+  drawText(text, x, y, color, font = '11px JetBrains Mono, monospace') {
+    if (!this.ctx || !text) {
       return;
     }
 
     this.ctx.fillStyle = color;
-    this.ctx.font = '11px JetBrains Mono, monospace';
+    this.ctx.font = font;
     this.ctx.fillText(text, x, y);
+  }
+
+  drawRoundedRect(x, y, width, height, radius, fillStyle, strokeStyle = null) {
+    if (!this.ctx) {
+      return;
+    }
+
+    const ctx = this.ctx;
+    const r = Math.min(radius, height / 2, width / 2);
+
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+
+    if (fillStyle) {
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+
+    if (strokeStyle) {
+      ctx.strokeStyle = strokeStyle;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
   }
 
   drawGuideLine(price, color, text, yOffset = -6, dash = [8, 4]) {
@@ -99,23 +182,21 @@ class PatternRenderer {
     const width = this.canvas.width / ratio;
 
     this.ctx.strokeStyle = color;
-    this.ctx.lineWidth = 1.5;
+    this.ctx.lineWidth = 1.2;
     this.ctx.setLineDash(dash);
     this.ctx.beginPath();
     this.ctx.moveTo(0, y);
     this.ctx.lineTo(width, y);
     this.ctx.stroke();
     this.ctx.setLineDash([]);
-    this.drawText(text, 12, y + yOffset, color.replace('88', '').replace('cc', ''));
+    this.drawText(text, 12, y + yOffset, color.replace('88', '').replace('aa', ''));
   }
 
-  drawRangeBand(lowPrice, highPrice, fillColor, strokeColor, text, startX = 0) {
+  drawRangeBand(lowPrice, highPrice, fillColor, strokeColor, text, startX, endX) {
     if (!this.ctx || !this.canvas) {
       return;
     }
 
-    const ratio = window.devicePixelRatio || 1;
-    const width = this.canvas.width / ratio;
     const lowY = this.series.priceToCoordinate(lowPrice);
     const highY = this.series.priceToCoordinate(highPrice);
 
@@ -123,15 +204,185 @@ class PatternRenderer {
       return;
     }
 
+    const x1 = Math.max(6, startX ?? 6);
+    const x2 = Math.max(x1 + 12, endX ?? x1 + 120);
     const y = Math.min(lowY, highY);
     const height = Math.max(Math.abs(lowY - highY), 3);
 
     this.ctx.fillStyle = fillColor;
-    this.ctx.fillRect(startX, y, width - startX, height);
+    this.ctx.fillRect(x1, y, x2 - x1, height);
     this.ctx.strokeStyle = strokeColor;
     this.ctx.lineWidth = 1;
-    this.ctx.strokeRect(startX, y, width - startX, height);
-    this.drawText(text, startX + 10, y + 14, strokeColor.replace('88', '').replace('cc', ''));
+    this.ctx.strokeRect(x1, y, x2 - x1, height);
+    this.drawText(text, x1 + 8, y + 14, strokeColor.replace('88', '').replace('aa', ''));
+  }
+
+  drawSegmentLabel(text, first, second, color, background, offsetX = 0, offsetY = 0) {
+    if (!this.ctx || first.x == null || first.y == null || second.x == null || second.y == null || !text) {
+      return;
+    }
+
+    this.ctx.font = '11px JetBrains Mono, monospace';
+    const x = (first.x + second.x) / 2 + offsetX;
+    const y = (first.y + second.y) / 2 + offsetY;
+    const textWidth = this.ctx.measureText(text).width;
+    this.drawRoundedRect(x - 6, y - 13, textWidth + 12, 18, 8, background);
+    this.drawText(text, x, y, color);
+  }
+
+  drawStatusBubble(text, x, y, palette, direction, index) {
+    if (!this.ctx || x == null || y == null || !text || !this.canvas) {
+      return;
+    }
+
+    const width = this.canvas.width / (window.devicePixelRatio || 1);
+    this.ctx.font = '12px JetBrains Mono, monospace';
+    const bubbleWidth = Math.min(width - 16, this.ctx.measureText(text).width + 22);
+    const bubbleHeight = 26;
+    const offsetY = direction === 'bullish' ? 30 + index * 18 : -44 - index * 18;
+    const bubbleX = Math.max(8, Math.min(width - bubbleWidth - 8, x - bubbleWidth / 2));
+    const bubbleY = Math.max(10, y + offsetY);
+    const pointerX = Math.max(bubbleX + 12, Math.min(bubbleX + bubbleWidth - 12, x));
+    const ctx = this.ctx;
+
+    this.drawRoundedRect(bubbleX, bubbleY, bubbleWidth, bubbleHeight, 10, palette.chipBg, palette.chipBorder);
+    this.drawText(text, bubbleX + 11, bubbleY + 17, palette.text, '12px JetBrains Mono, monospace');
+
+    ctx.beginPath();
+    ctx.fillStyle = palette.chipBg;
+
+    if (direction === 'bullish') {
+      ctx.moveTo(pointerX - 7, bubbleY);
+      ctx.lineTo(pointerX + 7, bubbleY);
+      ctx.lineTo(pointerX, bubbleY - 9);
+    } else {
+      ctx.moveTo(pointerX - 7, bubbleY + bubbleHeight);
+      ctx.lineTo(pointerX + 7, bubbleY + bubbleHeight);
+      ctx.lineTo(pointerX, bubbleY + bubbleHeight + 9);
+    }
+
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  harmonicPalette(direction, index) {
+    const palettes = HARMONIC_PALETTES[direction] || HARMONIC_PALETTES.bullish;
+    return palettes[index % palettes.length];
+  }
+
+  harmonicStatusText(pattern) {
+    const bias = pattern.direction === 'bullish' ? '\u770b\u6f32' : '\u770b\u8dcc';
+    const statusMap = {
+      forming: '\u5f62\u6210\u4e2d',
+      confirmed: '\u5df2\u78ba\u8a8d',
+      tp1_hit: '\u6b62\u76c81 \u2705',
+      tp2_hit: '\u6b62\u76c8 \u2705',
+      sl_hit: '\u6b62\u640d',
+    };
+    const status = statusMap[pattern.status?.key] || '\u89c0\u5bdf\u4e2d';
+    return `[${bias}] ${pattern.label} [${status}]`;
+  }
+
+  drawHarmonicPattern(pattern, index, width) {
+    if (!this.ctx) {
+      return;
+    }
+
+    const points = [
+      ['X', pattern.x],
+      ['A', pattern.a],
+      ['B', pattern.b],
+      ['C', pattern.c],
+      ['D', pattern.d],
+    ].map(([label, point]) => ({
+      label,
+      point,
+      position: this.tp(point.time, point.price),
+    }));
+
+    if (points.some((item) => item.position.x == null || item.position.y == null)) {
+      return;
+    }
+
+    const palette = this.harmonicPalette(pattern.direction, index);
+    const ctx = this.ctx;
+    const [xPoint, aPoint, bPoint, cPoint, dPoint] = points;
+
+    ctx.strokeStyle = palette.line;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    points.forEach((item, pointIndex) => {
+      if (pointIndex === 0) {
+        ctx.moveTo(item.position.x, item.position.y);
+      } else {
+        ctx.lineTo(item.position.x, item.position.y);
+      }
+    });
+    ctx.stroke();
+
+    ctx.strokeStyle = palette.lineSoft;
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath();
+    ctx.moveTo(xPoint.position.x, xPoint.position.y);
+    ctx.lineTo(dPoint.position.x, dPoint.position.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    points.forEach((item, pointIndex) => {
+      ctx.beginPath();
+      ctx.fillStyle = palette.line;
+      ctx.arc(item.position.x, item.position.y, pointIndex === 4 ? 5 : 4, 0, Math.PI * 2);
+      ctx.fill();
+      this.drawText(
+        item.label,
+        item.position.x + 6,
+        item.position.y + (pointIndex % 2 === 0 ? -8 : 14),
+        palette.text,
+        '12px JetBrains Mono, monospace',
+      );
+    });
+
+    this.drawSegmentLabel(pattern.ratios?.xab?.toFixed(3), aPoint.position, bPoint.position, palette.ratio, '#09101ddd', 0, -8);
+    this.drawSegmentLabel(pattern.ratios?.abc?.toFixed(3), bPoint.position, cPoint.position, palette.ratio, '#09101ddd', 0, -10);
+    this.drawSegmentLabel(pattern.ratios?.bcd?.toFixed(3), cPoint.position, dPoint.position, palette.ratio, '#09101ddd', 0, 16);
+    this.drawSegmentLabel(pattern.ratios?.xad?.toFixed(3), xPoint.position, dPoint.position, palette.ratio, '#09101ddd', 0, -18);
+
+    const bandStartX = Math.max(8, (cPoint.position.x || dPoint.position.x) - 12);
+    const bandEndX = Math.min(width - 10, (dPoint.position.x || width * 0.75) + 110);
+    this.drawRangeBand(
+      pattern.przRange[0],
+      pattern.przRange[1],
+      palette.fill,
+      palette.lineSoft,
+      `PRZ ${pattern.ratioTargets?.xad ? pattern.ratioTargets.xad[0].toFixed(3) : ''}`,
+      bandStartX,
+      bandEndX,
+    );
+
+    this.drawGuideLine(
+      pattern.stopLoss,
+      palette.stop,
+      `SL ${pattern.stopLoss.toPrecision(6)}`,
+      pattern.direction === 'bullish' ? 14 : -6,
+      [6, 6],
+    );
+    this.drawGuideLine(
+      pattern.target1,
+      palette.target1,
+      `T1 ${pattern.target1.toPrecision(6)}`,
+      pattern.direction === 'bullish' ? -6 : 14,
+      [7, 4],
+    );
+    this.drawGuideLine(
+      pattern.target2,
+      palette.target2,
+      `T2 ${pattern.target2.toPrecision(6)}`,
+      pattern.direction === 'bullish' ? -6 : 14,
+      [4, 6],
+    );
+
+    this.drawStatusBubble(this.harmonicStatusText(pattern), dPoint.position.x, dPoint.position.y, palette, pattern.direction, index);
   }
 
   render() {
@@ -143,7 +394,7 @@ class PatternRenderer {
     const width = this.canvas.width / ratio;
     const height = this.canvas.height / ratio;
     const ctx = this.ctx;
-    const { supportResistance, triangle, harmonic, wBottom, mTop, swingPoints } = this.patterns;
+    const { supportResistance, triangle, harmonics, harmonic, wBottom, mTop, swingPoints } = this.patterns;
 
     ctx.clearRect(0, 0, width, height);
 
@@ -231,96 +482,10 @@ class PatternRenderer {
       }
     }
 
-    if (harmonic) {
-      const color = harmonic.direction === 'bullish' ? '#38bdf8' : '#fb923c';
-      const guideColor = harmonic.direction === 'bullish' ? '#38bdf888' : '#fb923c88';
-      const targetColor = harmonic.direction === 'bullish' ? '#7dd3fc88' : '#fdba7488';
-      const stopColor = harmonic.direction === 'bullish' ? '#f8717188' : '#f472b688';
-      const directionLabel = harmonic.direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
-      const points = [
-        ['X', harmonic.x],
-        ['A', harmonic.a],
-        ['B', harmonic.b],
-        ['C', harmonic.c],
-        ['D', harmonic.d],
-      ];
-
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-
-      points.forEach(([, point], index) => {
-        const position = this.tp(point.time, point.price);
-
-        if (position.x == null || position.y == null) {
-          return;
-        }
-
-        if (index === 0) {
-          ctx.moveTo(position.x, position.y);
-        } else {
-          ctx.lineTo(position.x, position.y);
-        }
-      });
-
-      ctx.stroke();
-
-      points.forEach(([label, point], index) => {
-        const position = this.tp(point.time, point.price);
-
-        if (position.x == null || position.y == null) {
-          return;
-        }
-
-        ctx.beginPath();
-        ctx.fillStyle = color;
-        ctx.arc(position.x, position.y, 4.5, 0, Math.PI * 2);
-        ctx.fill();
-        this.drawText(label, position.x + 6, position.y + (index % 2 === 0 ? -8 : 14), color);
-      });
-
-      const anchor = this.tp(harmonic.d.time, harmonic.d.price);
-      if (anchor.x != null && anchor.y != null) {
-        this.drawText(`${harmonic.label} ${directionLabel}`, anchor.x + 10, anchor.y + (harmonic.direction === 'bullish' ? 18 : -14), color);
-      }
-
-      const bandStartX = Math.max(0, (anchor.x ?? width * 0.55) - 18);
-      this.drawRangeBand(
-        harmonic.przRange[0],
-        harmonic.przRange[1],
-        harmonic.direction === 'bullish' ? '#38bdf822' : '#fb923c22',
-        guideColor,
-        `PRZ ${harmonic.przRange[0].toPrecision(6)} - ${harmonic.przRange[1].toPrecision(6)}`,
-        bandStartX,
-      );
-
-      this.drawGuideLine(
-        harmonic.stopLoss,
-        stopColor,
-        `\u505c\u640d ${harmonic.stopLoss.toPrecision(6)}`,
-        harmonic.direction === 'bullish' ? 14 : -6,
-        [6, 6],
-      );
-
-      if (harmonic.target1) {
-        this.drawGuideLine(
-          harmonic.target1,
-          targetColor,
-          `T1 ${harmonic.target1.toPrecision(6)}`,
-          harmonic.direction === 'bullish' ? -6 : 14,
-        );
-      }
-
-      if (harmonic.target2) {
-        this.drawGuideLine(
-          harmonic.target2,
-          harmonic.direction === 'bullish' ? '#bae6fd88' : '#fed7aa88',
-          `T2 ${harmonic.target2.toPrecision(6)}`,
-          harmonic.direction === 'bullish' ? -6 : 14,
-          [4, 6],
-        );
-      }
-    }
+    const harmonicPatterns = harmonics?.length ? harmonics : harmonic ? [harmonic] : [];
+    harmonicPatterns.forEach((pattern, index) => {
+      this.drawHarmonicPattern(pattern, index, width, height);
+    });
 
     if (wBottom) {
       const first = this.tp(wBottom.leftFoot.time, wBottom.leftFoot.price);
