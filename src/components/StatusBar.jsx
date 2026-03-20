@@ -32,7 +32,7 @@ function ProgressPill({ label, value, tone = 'slate' }) {
   };
 
   return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClasses[tone]}`}>
+    <div className={`rounded-2xl border px-3 py-3 sm:px-4 ${toneClasses[tone]}`}>
       <p className="text-[11px] uppercase tracking-[0.28em] text-slate-300/80">{label}</p>
       <p className="mt-2 font-mono text-sm">{value}</p>
     </div>
@@ -80,13 +80,13 @@ export default function StatusBar({ status, timeframe, wsConnected, onRefresh, r
           type="button"
           onClick={() => onRefresh?.()}
           disabled={refreshing || scanner.isScanning}
-          className="inline-flex items-center justify-center rounded-full border border-emerald-400/35 bg-emerald-400/12 px-4 py-2 text-sm font-medium text-emerald-50 transition hover:border-emerald-300/55 hover:bg-emerald-400/18 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex w-full items-center justify-center rounded-full border border-emerald-400/35 bg-emerald-400/12 px-4 py-2 text-sm font-medium text-emerald-50 transition hover:border-emerald-300/55 hover:bg-emerald-400/18 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
         >
           {refreshing || scanner.isScanning ? '\u6383\u63cf\u4e2d...' : '\u7acb\u5373\u6383\u63cf'}
         </button>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-5">
         <ProgressPill label={'\u4e0a\u6b21\u6383\u63cf'} value={formatTime(scanner.lastScanAt)} tone="emerald" />
         <ProgressPill label={'\u4e0b\u6b21\u6383\u63cf'} value={formatTime(scanner.nextScanAt)} />
         <ProgressPill label={'\u9032\u5ea6'} value={progressValue} tone={scanner.isScanning ? 'amber' : 'slate'} />

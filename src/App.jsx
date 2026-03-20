@@ -19,7 +19,7 @@ function AppNavLink({ to, children, end = false }) {
       to={to}
       className={({ isActive }) =>
         [
-          'rounded-full border px-4 py-2 text-sm font-medium transition',
+          'inline-flex items-center justify-center rounded-full border px-4 py-2 text-sm font-medium transition',
           isActive
             ? 'border-emerald-400/80 bg-emerald-400/10 text-emerald-100'
             : 'border-white/10 bg-white/5 text-slate-300 hover:border-emerald-300/40 hover:text-white',
@@ -37,15 +37,15 @@ function AppShell({ children }) {
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(249,115,22,0.12),_transparent_28%),linear-gradient(180deg,#050816_0%,#0b1021_40%,#09111d_100%)]" />
       <div className="absolute inset-0 -z-10 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:56px_56px] opacity-20" />
 
-      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-4 pb-8 pt-5 sm:px-6 lg:px-8">
-        <header className="mb-6 flex flex-col gap-4 rounded-[28px] border border-white/10 bg-slate-950/55 px-5 py-5 shadow-[0_32px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-4 pb-8 pt-4 sm:px-6 sm:pt-5 lg:px-8">
+        <header className="mb-6 flex flex-col gap-4 rounded-[28px] border border-white/10 bg-slate-950/55 px-4 py-4 shadow-[0_32px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:px-5 sm:py-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="font-mono text-xs uppercase tracking-[0.35em] text-emerald-300/75">{COPY.eyebrow}</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">{COPY.title}</h1>
+            <h1 className="mt-2 text-xl font-semibold tracking-tight text-white sm:text-3xl">{COPY.title}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">{COPY.description}</p>
           </div>
 
-          <nav className="flex flex-wrap gap-3">
+          <nav className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
             <AppNavLink end to="/">
               {COPY.dashboard}
             </AppNavLink>

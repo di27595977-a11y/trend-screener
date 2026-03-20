@@ -67,7 +67,7 @@ export default function TradeAdvicePanel({ advice, currentPrice }) {
       </div>
 
       {showLevels ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
           <NumberCard label={COPY.entry} value={advice.entry} basePrice={basePrice} />
           <NumberCard label={COPY.sl} value={advice.sl} basePrice={basePrice} tone="danger" />
           <NumberCard label={COPY.tp1} value={advice.tp1} basePrice={basePrice} tone="success" />

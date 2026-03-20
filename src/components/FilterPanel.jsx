@@ -22,8 +22,8 @@ export default function FilterPanel({ filters, onChange }) {
     <aside className="panel rounded-[28px] px-5 py-5">
       <div className="mb-6">
         <p className="font-mono text-xs uppercase tracking-[0.35em] text-emerald-300/75">{COPY.eyebrow}</p>
-        <h2 className="mt-2 text-xl font-semibold text-white">{COPY.title}</h2>
-        <p className="mt-2 text-sm text-slate-300">{COPY.description}</p>
+        <h2 className="mt-2 text-lg font-semibold text-white sm:text-xl">{COPY.title}</h2>
+        <p className="mt-2 text-sm text-slate-300 sm:block">{COPY.description}</p>
       </div>
 
       <div className="space-y-6">
@@ -72,7 +72,7 @@ export default function FilterPanel({ filters, onChange }) {
             value={filters.search}
             onChange={(event) => onChange({ search: event.target.value.toUpperCase() })}
             placeholder={COPY.searchPlaceholder}
-            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none transition placeholder:text-slate-400 focus:border-emerald-400/45"
+            className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white outline-none transition placeholder:text-slate-400 focus:border-emerald-400/45 sm:text-sm"
           />
         </section>
 

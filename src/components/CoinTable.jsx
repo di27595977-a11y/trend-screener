@@ -1,4 +1,5 @@
 import CoinRow from './CoinRow';
+import CoinCard from './CoinCard';
 
 const HEADERS = [
   '\u5e63\u7a2e',
@@ -17,7 +18,13 @@ const HEADERS = [
 export default function CoinTable({ rows, priceMap, onSelect }) {
   return (
     <section className="panel overflow-hidden rounded-[28px]">
-      <div className="overflow-x-auto">
+      <div className="lg:hidden">
+        {rows.map((coin) => (
+          <CoinCard key={`${coin.symbol}-${coin.timeframe}`} coin={coin} livePrice={priceMap[coin.symbol]} onSelect={onSelect} />
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto lg:block">
         <table className="min-w-full border-collapse">
           <thead>
             <tr className="border-b border-white/8 bg-white/[0.03] text-left text-xs uppercase tracking-[0.24em] text-slate-400">

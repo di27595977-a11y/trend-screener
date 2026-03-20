@@ -51,7 +51,7 @@ export default function StrategySettingsPanel({ settings, saving, savedAt, onFie
     <aside className="panel rounded-[28px] px-5 py-5">
       <div className="mb-6">
         <p className="font-mono text-xs uppercase tracking-[0.35em] text-sky-300/80">{COPY.eyebrow}</p>
-        <h2 className="mt-2 text-xl font-semibold text-white">{COPY.title}</h2>
+        <h2 className="mt-2 text-lg font-semibold text-white sm:text-xl">{COPY.title}</h2>
         <p className="mt-2 text-sm text-slate-300">{COPY.description}</p>
       </div>
 
@@ -71,7 +71,7 @@ export default function StrategySettingsPanel({ settings, saving, savedAt, onFie
                     max={field.max}
                     step={field.step}
                     onChange={(event) => onFieldChange(field.section, field.key, Number(event.target.value))}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 font-mono text-sm text-white outline-none transition focus:border-sky-400/50"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950/60 px-3 py-2 font-mono text-base text-white outline-none transition focus:border-sky-400/50 sm:text-sm"
                   />
                 </label>
               ))}
@@ -80,7 +80,7 @@ export default function StrategySettingsPanel({ settings, saving, savedAt, onFie
         ))}
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
+      <div className="mt-6 grid gap-3 sm:flex sm:flex-wrap">
         <button
           type="button"
           onClick={() => onReset(cloneDefaults())}

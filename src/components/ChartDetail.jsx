@@ -51,6 +51,18 @@ const TOGGLE_OPTIONS = [
   ['swingPoints', COPY.swingPoints],
 ];
 
+function getChartHeight(width) {
+  if (width < 640) {
+    return 360;
+  }
+
+  if (width < 1024) {
+    return 440;
+  }
+
+  return 520;
+}
+
 function toCandleSeriesData(candles) {
   return candles.map((candle) => ({
     time: candle.time,
@@ -301,7 +313,7 @@ export default function ChartDetail() {
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
-      height: 520,
+      height: getChartHeight(containerRef.current.clientWidth),
       layout: {
         background: { color: '#09101d' },
         textColor: '#94a3b8',
@@ -360,7 +372,7 @@ export default function ChartDetail() {
 
       chart.applyOptions({
         width: entry.contentRect.width,
-        height: 520,
+        height: getChartHeight(entry.contentRect.width),
       });
       renderer.render();
     });
@@ -546,12 +558,12 @@ export default function ChartDetail() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="grid w-full grid-cols-1 gap-3 sm:flex sm:w-auto sm:flex-wrap">
             <a
               href={buildBinanceChartUrl(symbol)}
               target="_blank"
               rel="noreferrer"
-              className="rounded-full border border-emerald-400/35 bg-emerald-400/12 px-4 py-2 text-sm font-medium text-emerald-50 transition hover:border-emerald-300/50"
+              className="rounded-full border border-emerald-400/35 bg-emerald-400/12 px-4 py-2 text-center text-sm font-medium text-emerald-50 transition hover:border-emerald-300/50"
             >
               {COPY.openBinance}
             </a>
@@ -559,7 +571,7 @@ export default function ChartDetail() {
               href={buildTradingViewUrl(symbol)}
               target="_blank"
               rel="noreferrer"
-              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-white/20"
+              className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-center text-sm font-medium text-slate-100 transition hover:border-white/20"
             >
               {COPY.openTradingView}
             </a>
@@ -573,7 +585,10 @@ export default function ChartDetail() {
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="panel rounded-[28px] px-5 py-5">
-          <div ref={containerRef} className="h-[520px] w-full overflow-hidden rounded-[24px] border border-white/10 bg-[#09101d]" />
+          <div
+            ref={containerRef}
+            className="h-[360px] w-full overflow-hidden rounded-[24px] border border-white/10 bg-[#09101d] sm:h-[440px] lg:h-[520px]"
+          />
           {loading && <p className="mt-4 text-sm text-slate-300">{COPY.loading}</p>}
         </div>
 
@@ -587,7 +602,7 @@ export default function ChartDetail() {
 
           <section className="panel rounded-[28px] px-5 py-5">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.toggles}</p>
-            <div className="mt-4 space-y-2">
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {TOGGLE_OPTIONS.map(([key, label]) => (
                 <label
                   key={key}
@@ -643,7 +658,7 @@ export default function ChartDetail() {
                 {buildHarmonicRatioRows(patterns.harmonic).map(([label, actual, target]) => (
                   <div
                     key={label}
-                    className="grid grid-cols-[64px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
+                    className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm sm:grid-cols-[64px_minmax(0,1fr)_minmax(0,1fr)] sm:items-center"
                   >
                     <span className="font-mono text-white">{label}</span>
                     <div>

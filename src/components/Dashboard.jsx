@@ -76,6 +76,7 @@ function formatTopDescription(bestRow) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [mobilePanel, setMobilePanel] = useState('filters');
   const [strategySettings, setStrategySettings] = useState(DEFAULT_RUNTIME_SETTINGS);
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState(null);
@@ -256,32 +257,86 @@ export default function Dashboard() {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <div className="space-y-6">
-        <FilterPanel
-          filters={filters}
-          onChange={(nextValues) => {
-            setFilters((current) => ({ ...current, ...nextValues }));
-          }}
-        />
+      <div className="space-y-4 xl:space-y-6">
+        <div className="panel rounded-[28px] p-2 xl:hidden">
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              ['filters', '\u7be9\u9078'],
+              ['strategy', '\u7b56\u7565'],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setMobilePanel(key)}
+                className={`rounded-[20px] px-4 py-3 text-sm font-medium transition ${
+                  mobilePanel === key
+                    ? 'bg-emerald-400/14 text-emerald-50 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.35)]'
+                    : 'bg-white/[0.04] text-slate-300'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-        <StrategySettingsPanel
-          settings={strategySettings}
-          saving={savingSettings}
-          savedAt={settingsSavedAt}
-          onFieldChange={(section, key, value) =>
-            setStrategySettings((current) => ({
-              ...current,
-              [section]: {
-                ...current[section],
-                [key]: value,
-              },
-            }))
-          }
-          onReset={(nextSettings) => {
-            setStrategySettings(nextSettings);
-          }}
-          onSave={handleSaveSettings}
-        />
+        <div className="xl:hidden">
+          {mobilePanel === 'filters' ? (
+            <FilterPanel
+              filters={filters}
+              onChange={(nextValues) => {
+                setFilters((current) => ({ ...current, ...nextValues }));
+              }}
+            />
+          ) : (
+            <StrategySettingsPanel
+              settings={strategySettings}
+              saving={savingSettings}
+              savedAt={settingsSavedAt}
+              onFieldChange={(section, key, value) =>
+                setStrategySettings((current) => ({
+                  ...current,
+                  [section]: {
+                    ...current[section],
+                    [key]: value,
+                  },
+                }))
+              }
+              onReset={(nextSettings) => {
+                setStrategySettings(nextSettings);
+              }}
+              onSave={handleSaveSettings}
+            />
+          )}
+        </div>
+
+        <div className="hidden space-y-6 xl:block">
+          <FilterPanel
+            filters={filters}
+            onChange={(nextValues) => {
+              setFilters((current) => ({ ...current, ...nextValues }));
+            }}
+          />
+
+          <StrategySettingsPanel
+            settings={strategySettings}
+            saving={savingSettings}
+            savedAt={settingsSavedAt}
+            onFieldChange={(section, key, value) =>
+              setStrategySettings((current) => ({
+                ...current,
+                [section]: {
+                  ...current[section],
+                  [key]: value,
+                },
+              }))
+            }
+            onReset={(nextSettings) => {
+              setStrategySettings(nextSettings);
+            }}
+            onSave={handleSaveSettings}
+          />
+        </div>
       </div>
 
       <div>
@@ -293,7 +348,7 @@ export default function Dashboard() {
           refreshing={refreshing}
         />
 
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div className="panel-soft rounded-[24px] px-5 py-5">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.candidates}</p>
             <p className="mt-3 font-mono text-3xl text-white">{visibleRows.length}</p>
@@ -306,7 +361,7 @@ export default function Dashboard() {
               {'\u5feb\u901f\u78ba\u8a8d\u76ee\u524d\u6574\u9ad4\u76e4\u9762\u662f\u5426\u9084\u4fdd\u6301\u8d8a\u52e2\u3002'}
             </p>
           </div>
-          <div className="panel-soft rounded-[24px] px-5 py-5">
+          <div className="panel-soft rounded-[24px] px-5 py-5 sm:col-span-2 xl:col-span-1">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.topSetup}</p>
             <p className="mt-3 font-mono text-3xl text-white">{bestRow?.symbol || '--'}</p>
             <p className="mt-2 text-sm text-slate-300">{formatTopDescription(bestRow)}</p>
