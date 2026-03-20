@@ -13,7 +13,7 @@ import wsManager from '../services/wsManager';
 const DEFAULT_FILTERS = {
   mode: 'trend',
   timeframe: '1h',
-  minScore: 55,
+  minScore: DEFAULT_RUNTIME_SETTINGS.scan.minScoreDefault,
   search: '',
   patterns: {
     triangle: false,
@@ -21,12 +21,6 @@ const DEFAULT_FILTERS = {
     wBottom: false,
     mTop: false,
   },
-};
-
-const MODE_MIN_SCORE = {
-  trend: 55,
-  harmonic: 40,
-  hybrid: 50,
 };
 
 const COPY = {
@@ -93,6 +87,20 @@ function formatTopDescription(bestRow, mode) {
   return `${mode === 'harmonic' ? '\u8da8\u52e2\u5e95\u5206' : '\u5206\u6578'} ${bestRow.trendScore}\uff0c\u76ee\u524d\u5075\u6e2c\u5230 ${patternCount} \u7a2e\u5f62\u614b\u7dda\u7d22\u3002`;
 }
 
+function getModeDefaultMinScore(mode, settings = DEFAULT_RUNTIME_SETTINGS) {
+  const baseScore = settings?.scan?.minScoreDefault ?? DEFAULT_RUNTIME_SETTINGS.scan.minScoreDefault;
+
+  if (mode === 'harmonic') {
+    return Math.min(baseScore, 40);
+  }
+
+  if (mode === 'hybrid') {
+    return Math.min(baseScore, 50);
+  }
+
+  return baseScore;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
@@ -144,7 +152,9 @@ export default function Dashboard() {
 
         setStrategySettings(nextSettings);
         setFilters((current) =>
-          current.minScore === MODE_MIN_SCORE[current.mode] ? { ...current, minScore: MODE_MIN_SCORE[current.mode] || nextSettings.scan.minScoreDefault } : current,
+          current.minScore === getModeDefaultMinScore(current.mode, DEFAULT_RUNTIME_SETTINGS)
+            ? { ...current, minScore: getModeDefaultMinScore(current.mode, nextSettings) }
+            : current,
         );
       } catch (loadError) {
         if (!cancelled) {
@@ -253,14 +263,14 @@ export default function Dashboard() {
       setStrategySettings(nextSettings);
       setFilters((current) => ({
         ...current,
-        minScore: MODE_MIN_SCORE[current.mode] || nextSettings.scan.minScoreDefault,
+        minScore: getModeDefaultMinScore(current.mode, nextSettings),
       }));
       setSettingsSavedAt(new Date().toISOString());
       await triggerScan({ timeframe: filters.timeframe, mode: filters.mode });
       const snapshot = await loadDashboardSnapshot({
         mode: filters.mode,
         timeframe: filters.timeframe,
-        minScore: MODE_MIN_SCORE[filters.mode] || nextSettings.scan.minScoreDefault,
+        minScore: getModeDefaultMinScore(filters.mode, nextSettings),
         patterns: toPatternFilterList(filters.patterns),
       });
 
@@ -313,7 +323,7 @@ export default function Dashboard() {
                   return {
                     ...current,
                     ...nextValues,
-                    minScore: nextValues.mode ? MODE_MIN_SCORE[nextMode] || current.minScore : current.minScore,
+                    minScore: nextValues.mode ? getModeDefaultMinScore(nextMode, strategySettings) : current.minScore,
                   };
                 });
               }}
@@ -349,7 +359,7 @@ export default function Dashboard() {
                 return {
                   ...current,
                   ...nextValues,
-                  minScore: nextValues.mode ? MODE_MIN_SCORE[nextMode] || current.minScore : current.minScore,
+                  minScore: nextValues.mode ? getModeDefaultMinScore(nextMode, strategySettings) : current.minScore,
                 };
               });
             }}
