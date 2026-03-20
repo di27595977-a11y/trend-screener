@@ -23,7 +23,8 @@ Trend Screener is a React + Vite + Express app for scanning Binance USDT-M perpe
 Copy `.env.example` to `.env` and fill what you need.
 
 - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are optional but required for durable scan history/backtests.
-- `VITE_API_TARGET` should point to your deployed API base when the frontend is on Vercel.
+- `VITE_API_TARGET` should point to your deployed API base when you run the Express server path.
+- If you do not have a VPS yet, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel and let the frontend call Supabase Edge Functions directly.
 - `BINANCE_SYMBOL_LIMIT` is useful for faster local development.
 - `BINANCE_REQUESTS_PER_SECOND` defaults to `4` to stay conservative on REST limits.
 
@@ -32,15 +33,31 @@ Copy `.env.example` to `.env` and fill what you need.
 - Vercel: host the React frontend only.
 - VPS or other always-on Node host: run `npm run start` for the Express API, scan scheduler, and backtest scheduler.
 - Supabase: run [supabase/schema.sql](/Users/tatto/Desktop/trend-screener/supabase/schema.sql) before enabling persistent storage.
+- Supabase-only starter: deploy [supabase/functions/trend-api/index.ts](/Users/tatto/Desktop/trend-screener/supabase/functions/trend-api/index.ts), run [supabase/schema.sql](/Users/tatto/Desktop/trend-screener/supabase/schema.sql), then add the scheduled jobs from [supabase/cron.sql](/Users/tatto/Desktop/trend-screener/supabase/cron.sql).
 
 This split matters because Vercel is great for the frontend, but the scan and backtest jobs need a long-running process.
+The Supabase-only option works as a free-tier bridge until you move scanning to a VPS later.
 
 ## Vercel Setup
 
 1. Add the project to Vercel as a Vite app.
-2. Set `VITE_API_TARGET` to your VPS API origin, for example `https://api.your-domain.com`.
+2. If using Supabase-only mode, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+3. If using VPS mode instead, set `VITE_API_TARGET` to your VPS API origin, for example `https://api.your-domain.com`.
 3. Keep the default build command `npm run build`.
 4. The SPA rewrite is already defined in [vercel.json](/Users/tatto/Desktop/trend-screener/vercel.json).
+
+## Supabase Setup
+
+1. Create a free Supabase project in the dashboard.
+2. Run [supabase/schema.sql](/Users/tatto/Desktop/trend-screener/supabase/schema.sql) in the SQL editor.
+3. Deploy the Edge Function in [supabase/functions/trend-api/index.ts](/Users/tatto/Desktop/trend-screener/supabase/functions/trend-api/index.ts).
+4. Run [supabase/cron.sql](/Users/tatto/Desktop/trend-screener/supabase/cron.sql) after replacing the placeholder project URL and anon key.
+5. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Vercel, then redeploy the frontend.
+
+## GitHub Automation For Supabase
+
+- The repo includes [.github/workflows/deploy-supabase-functions.yml](/Users/tatto/Desktop/trend-screener/.github/workflows/deploy-supabase-functions.yml).
+- Add GitHub secrets `SUPABASE_ACCESS_TOKEN` and `SUPABASE_PROJECT_ID` if you want every push to redeploy the Edge Function automatically.
 
 ## GitHub to Vercel
 

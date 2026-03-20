@@ -44,6 +44,17 @@ create table if not exists backtest_tracking (
   updated_at timestamptz default now()
 );
 
+create table if not exists app_state (
+  key text primary key,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_scan_results_symbol_created_at on scan_results(symbol, created_at desc);
 create index if not exists idx_scan_results_score on scan_results(trend_score desc);
 create index if not exists idx_backtest_pending on backtest_tracking(price_72h) where price_72h is null;
+
+alter table scan_snapshots enable row level security;
+alter table scan_results enable row level security;
+alter table backtest_tracking enable row level security;
+alter table app_state enable row level security;
