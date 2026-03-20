@@ -8,6 +8,10 @@ export function createAdminClient() {
   });
 }
 
+function normalizeSnapshotBias(params: Record<string, unknown> | null | undefined) {
+  return params?.bias === 'short' ? 'short' : 'long';
+}
+
 const BACKTEST_RESULT_BATCH_SIZE = 100;
 
 function average(values: Array<number | null | undefined>) {
@@ -117,6 +121,7 @@ export async function recordScan(
     results: Array<Record<string, unknown>>;
   },
 ) {
+  const scanBias = normalizeSnapshotBias(payload.params);
   const { data: snapshot, error: snapshotError } = await admin
     .from('scan_snapshots')
     .insert({
@@ -153,11 +158,14 @@ export async function recordScan(
   const { data: insertedResults, error: resultError } = await admin.from('scan_results').insert(resultPayload).select();
   if (resultError) throw resultError;
 
-  const backtestPayload = (insertedResults || []).map((row: any) => ({
-    scan_result_id: row.id,
-    symbol: row.symbol,
-    entry_price: row.entry_price,
-  }));
+  const backtestPayload =
+    scanBias === 'short'
+      ? []
+      : (insertedResults || []).map((row: any) => ({
+          scan_result_id: row.id,
+          symbol: row.symbol,
+          entry_price: row.entry_price,
+        }));
 
   if (backtestPayload.length) {
     const { error: backtestError } = await admin.from('backtest_tracking').insert(backtestPayload);
@@ -167,12 +175,17 @@ export async function recordScan(
   return snapshot;
 }
 
-export async function getLatestScanResults(admin: ReturnType<typeof createAdminClient>, timeframe: string, mode = 'trend') {
+export async function getLatestScanResults(
+  admin: ReturnType<typeof createAdminClient>,
+  timeframe: string,
+  mode = 'trend',
+  bias = 'long',
+) {
   const { data: snapshot, error: snapshotError } = await admin
     .from('scan_snapshots')
     .select('*')
     .eq('timeframe', timeframe)
-    .contains('params', { mode })
+    .contains('params', { mode, bias: normalizeSnapshotBias({ bias }) })
     .order('scanned_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -203,6 +216,7 @@ export async function getLatestScanResults(admin: ReturnType<typeof createAdminC
       positionScore: row.position_score,
       entryPrice: row.entry_price,
       currentPrice: row.entry_price,
+      setupSide: normalizeSnapshotBias(snapshot.params),
       detectedPatterns: row.detected_patterns || [],
       sparkline: row.sparkline || [],
     })),
@@ -219,7 +233,28 @@ export async function getLatestSymbolOverview(admin: ReturnType<typeof createAdm
 
   if (error) throw error;
 
-  const uniqueByTimeframe = Array.from(new Map((rows || []).map((row: any) => [row.timeframe, row])).values());
+  const snapshotIds = Array.from(new Set((rows || []).map((row: any) => row.snapshot_id).filter(Boolean)));
+  let snapshotsById = new Map<string, any>();
+
+  if (snapshotIds.length) {
+    const { data: snapshots, error: snapshotError } = await admin.from('scan_snapshots').select('*').in('id', snapshotIds);
+    if (snapshotError) throw snapshotError;
+    snapshotsById = new Map((snapshots || []).map((snapshot: any) => [snapshot.id, snapshot]));
+  }
+
+  const decoratedRows = (rows || []).map((row: any) => {
+    const snapshot = snapshotsById.get(row.snapshot_id);
+
+    return {
+      ...row,
+      setup_side: normalizeSnapshotBias(snapshot?.params),
+      scan_mode: snapshot?.params?.mode || 'trend',
+    };
+  });
+
+  const uniqueByTimeframe = Array.from(
+    new Map(decoratedRows.map((row: any) => [`${row.timeframe}:${row.scan_mode}:${row.setup_side}`, row])).values(),
+  );
   const best = [...uniqueByTimeframe].sort((left: any, right: any) => right.trend_score - left.trend_score)[0] || null;
 
   return {

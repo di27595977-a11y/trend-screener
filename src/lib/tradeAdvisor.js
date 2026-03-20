@@ -186,6 +186,7 @@ export function generateTradeAdvice(input = {}) {
   }
 
   const positionScore = toFiniteNumber(input.positionScore) ?? 0;
+  const modelBias = input.modelBias === 'short' ? 'short' : 'long';
   const score = toFiniteNumber(input.score) ?? 0;
   const pullbackRatio = toFiniteNumber(input.pullbackRatio);
   const rSquared = toFiniteNumber(input.rSquared);
@@ -310,7 +311,19 @@ export function generateTradeAdvice(input = {}) {
   }
 
   if (!lockedWatch && direction === 'watch') {
-    if (positionScore < 0.5 && score >= 60) {
+    if (modelBias === 'short' && positionScore < 0.5 && score >= 60) {
+      const stopLoss = nearestResistance ? nearestResistance.price * 1.03 : currentPrice * 1.05;
+      const target1 = nearestSupport ? nearestSupport.price : currentPrice * 0.92;
+
+      applyTradeSetup('short', {
+        nextSl: stopLoss,
+        nextTp1: target1,
+        nextTp2: target1 - (stopLoss - target1),
+        reason: `趨勢向下（分數 ${Math.round(score)}），目前位於區間中段（${Math.round(
+          positionScore * 100,
+        )}%），尚有下跌空間`,
+      });
+    } else if (positionScore < 0.5 && score >= 60) {
       const stopLoss = nearestSupport ? nearestSupport.price * 0.97 : currentPrice * 0.95;
       const target1 = nearestResistance ? nearestResistance.price : currentPrice * 1.08;
 
@@ -346,6 +359,11 @@ export function generateTradeAdvice(input = {}) {
     signalCount += 1;
   }
 
+  if (!lockedWatch && direction === 'short' && pullbackRatio != null && pullbackRatio <= 0.2) {
+    uniquePush(reasons, `反彈幅度小（${(pullbackRatio * 100).toFixed(1)}%），空頭控盤明確`, 4);
+    signalCount += 1;
+  }
+
   if (!lockedWatch && direction !== 'watch' && patterns.triangle?.type === 'symmetric') {
     uniquePush(reasons, '\u5c0d\u7a31\u4e09\u89d2\u6536\u6582\u4e2d\uff0c\u7b49\u5f85\u7a81\u7834\u65b9\u5411\u78ba\u8a8d', 4);
   }
@@ -353,11 +371,21 @@ export function generateTradeAdvice(input = {}) {
   let riskReward = direction === 'watch' ? null : calculateRiskReward(direction, entry, sl, tp1);
 
   if (positionScore > 0.85) {
-    uniquePush(warnings, `\u26a0\ufe0f \u76ee\u524d\u4f4d\u65bc\u5340\u9593\u9ad8\u9ede\uff08${Math.round(positionScore * 100)}%\uff09\uff0c\u8ffd\u9ad8\u98a8\u96aa\u8f03\u5927`);
+    uniquePush(
+      warnings,
+      modelBias === 'short'
+        ? `⚠️ 目前位於空頭延伸區（${Math.round(positionScore * 100)}%），追空風險較大`
+        : `\u26a0\ufe0f \u76ee\u524d\u4f4d\u65bc\u5340\u9593\u9ad8\u9ede\uff08${Math.round(positionScore * 100)}%\uff09\uff0c\u8ffd\u9ad8\u98a8\u96aa\u8f03\u5927`,
+    );
   }
 
-  if (priceChangePercent != null && priceChangePercent > 15) {
-    uniquePush(warnings, `\u26a0\ufe0f \u77ed\u671f\u6f32\u5e45\u5df2\u9054 ${priceChangePercent.toFixed(1)}%\uff0c\u6ce8\u610f\u6025\u62c9\u56de\u8abf\u98a8\u96aa`);
+  if (priceChangePercent != null && Math.abs(priceChangePercent) > 15) {
+    uniquePush(
+      warnings,
+      modelBias === 'short'
+        ? `⚠️ 短期跌幅已達 ${Math.abs(priceChangePercent).toFixed(1)}%，注意急跌後反彈風險`
+        : `\u26a0\ufe0f \u77ed\u671f\u6f32\u5e45\u5df2\u9054 ${priceChangePercent.toFixed(1)}%\uff0c\u6ce8\u610f\u6025\u62c9\u56de\u8abf\u98a8\u96aa`,
+    );
   }
 
   if (direction !== 'watch' && riskReward != null && riskReward < 1.5) {

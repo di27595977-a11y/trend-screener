@@ -7,6 +7,10 @@ export const SCAN_TIMEFRAME_CONFIG = {
 
 export const DEFAULT_THRESHOLDS = DEFAULT_RUNTIME_SETTINGS.thresholds;
 
+export function normalizeTradeBias(bias = 'long') {
+  return bias === 'short' ? 'short' : 'long';
+}
+
 export function linearRegression(prices) {
   const n = prices.length;
 
@@ -49,6 +53,26 @@ export function calcPullbackRatio(highs, lows) {
   return (swingHigh - pullbackLow) / totalRange;
 }
 
+export function calcBounceRatio(highs, lows) {
+  if (!highs.length || !lows.length) {
+    return 1;
+  }
+
+  const swingHigh = Math.max(...highs);
+  const swingLow = Math.min(...lows);
+  const totalRange = swingHigh - swingLow;
+
+  if (totalRange === 0) {
+    return 1;
+  }
+
+  const lowIndex = lows.indexOf(swingLow);
+  const afterLowHighs = highs.slice(lowIndex);
+  const reboundHigh = Math.max(...afterLowHighs);
+
+  return (reboundHigh - swingLow) / totalRange;
+}
+
 export function volumeStructure(opens, closes, volumes) {
   const upVolumes = [];
   const downVolumes = [];
@@ -64,7 +88,10 @@ export function volumeStructure(opens, closes, volumes) {
   const avgUp = upVolumes.reduce((sum, value) => sum + value, 0) / (upVolumes.length || 1);
   const avgDown = downVolumes.reduce((sum, value) => sum + value, 0) / (downVolumes.length || 1);
 
-  return avgDown === 0 ? 2 : avgUp / avgDown;
+  return {
+    bullishRatio: avgDown === 0 ? 2 : avgUp / avgDown,
+    bearishRatio: avgUp === 0 ? 2 : avgDown / avgUp,
+  };
 }
 
 export function priceChangePercent(closes) {
@@ -93,6 +120,7 @@ export function evaluateTrend(candles) {
   const closes = candles.map((candle) => candle.close);
   const volumes = candles.map((candle) => candle.volume);
   const regression = linearRegression(closes);
+  const volumeMetrics = volumeStructure(opens, closes, volumes);
   const latestClose = closes.at(-1) ?? 0;
   const baseClose = closes[0] ?? 0;
 
@@ -101,7 +129,9 @@ export function evaluateTrend(candles) {
     slope: regression.slope,
     slopePctPerBar: baseClose === 0 ? 0 : (regression.slope / baseClose) * 100,
     pullbackRatio: calcPullbackRatio(highs, lows),
-    volumeRatio: volumeStructure(opens, closes, volumes),
+    bounceRatio: calcBounceRatio(highs, lows),
+    volumeRatio: volumeMetrics.bullishRatio,
+    bearishVolumeRatio: volumeMetrics.bearishRatio,
     priceChange: priceChangePercent(closes),
     positionScore: positionScore(highs, lows, latestClose),
     latestClose,
@@ -113,14 +143,31 @@ export function evaluateTrend(candles) {
   };
 }
 
-export function passesTrendThresholds(metrics, thresholds = DEFAULT_THRESHOLDS) {
+export function getDirectionalMetrics(metrics, bias = 'long') {
+  const tradeBias = normalizeTradeBias(bias);
+
+  return {
+    rSquared: metrics.rSquared,
+    slope: tradeBias === 'short' ? -metrics.slope : metrics.slope,
+    slopePctPerBar: tradeBias === 'short' ? -metrics.slopePctPerBar : metrics.slopePctPerBar,
+    pullbackRatio: tradeBias === 'short' ? (metrics.bounceRatio ?? 1) : metrics.pullbackRatio,
+    volumeRatio: tradeBias === 'short' ? (metrics.bearishVolumeRatio ?? 0) : metrics.volumeRatio,
+    priceChange: tradeBias === 'short' ? -metrics.priceChange : metrics.priceChange,
+    positionScore: tradeBias === 'short' ? 1 - metrics.positionScore : metrics.positionScore,
+    latestClose: metrics.latestClose,
+  };
+}
+
+export function passesTrendThresholds(metrics, thresholds = DEFAULT_THRESHOLDS, bias = 'long') {
+  const directional = getDirectionalMetrics(metrics, bias);
+
   return (
-    metrics.rSquared >= thresholds.minRSquared &&
-    metrics.slope > 0 &&
-    metrics.pullbackRatio <= thresholds.maxPullbackRatio &&
-    metrics.volumeRatio >= thresholds.minVolumeRatio &&
-    metrics.priceChange >= thresholds.minPriceChange &&
-    metrics.priceChange <= thresholds.maxPriceChange
+    directional.rSquared >= thresholds.minRSquared &&
+    directional.slope > 0 &&
+    directional.pullbackRatio <= thresholds.maxPullbackRatio &&
+    directional.volumeRatio >= thresholds.minVolumeRatio &&
+    directional.priceChange >= thresholds.minPriceChange &&
+    directional.priceChange <= thresholds.maxPriceChange
   );
 }
 

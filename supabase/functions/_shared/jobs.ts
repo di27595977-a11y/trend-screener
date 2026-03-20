@@ -5,10 +5,11 @@ import {
   calculateTrendScore,
   detectAllPatterns,
   evaluateTrend,
+  normalizeTradeBias,
   passesTrendThresholds,
   summarizePatterns,
 } from './logic.ts';
-import { getRuntimeSettings, listPendingBacktests, recordScan, setAppState, updateBacktestEntry } from './db.ts';
+import { getAppState, getRuntimeSettings, listPendingBacktests, recordScan, setAppState, updateBacktestEntry } from './db.ts';
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,6 +75,10 @@ function normalizeScanMode(mode = 'trend') {
   return ['trend', 'harmonic', 'hybrid'].includes(mode) ? mode : 'trend';
 }
 
+function normalizeScanBias(bias = 'long') {
+  return normalizeTradeBias(bias);
+}
+
 function getPatternHarmonics(patterns: any) {
   if (!patterns) {
     return [];
@@ -86,8 +91,11 @@ function getPatternHarmonics(patterns: any) {
   return patterns.harmonic ? [patterns.harmonic] : [];
 }
 
-function getActionableHarmonic(patterns: any) {
-  return getPatternHarmonics(patterns).find((pattern: any) => ACTIVE_HARMONIC_STATUSES.has(pattern.status?.key)) || null;
+function getActionableHarmonic(patterns: any, bias = 'long') {
+  const targetDirection = normalizeScanBias(bias) === 'short' ? 'bearish' : 'bullish';
+  return getPatternHarmonics(patterns).find(
+    (pattern: any) => pattern.direction === targetDirection && ACTIVE_HARMONIC_STATUSES.has(pattern.status?.key),
+  ) || null;
 }
 
 function sortResultsForMode(results: any[], mode = 'trend') {
@@ -107,10 +115,11 @@ function sortResultsForMode(results: any[], mode = 'trend') {
   });
 }
 
-export async function runScan(admin: any, timeframe: string, mode = 'trend') {
+export async function runScan(admin: any, timeframe: string, mode = 'trend', bias = 'long') {
   const config = SCAN_TIMEFRAME_CONFIG[timeframe];
   if (!config) throw new Error(`Unsupported timeframe: ${timeframe}`);
   const scanMode = normalizeScanMode(mode);
+  const scanBias = normalizeScanBias(bias);
 
   const symbols = await fetchTradableSymbols();
   const startedAt = Date.now();
@@ -120,6 +129,7 @@ export async function runScan(admin: any, timeframe: string, mode = 'trend') {
     isScanning: true,
     activeTimeframe: timeframe,
     activeMode: scanMode,
+    activeBias: scanBias,
     progress: { completed: 0, total: symbols.length, percent: 0 },
   });
 
@@ -131,13 +141,14 @@ export async function runScan(admin: any, timeframe: string, mode = 'trend') {
       if (candles.length < config.limit) return null;
 
       const metrics = evaluateTrend(candles);
-      const passesTrend = passesTrendThresholds(metrics, runtimeSettings.thresholds);
+      const passesTrend = passesTrendThresholds(metrics, runtimeSettings.thresholds, scanBias);
       if (scanMode === 'trend' && !passesTrend) return null;
 
       return {
         symbol,
         timeframe,
-        trendScore: calculateTrendScore(metrics, runtimeSettings),
+        setupSide: scanBias,
+        trendScore: calculateTrendScore(metrics, runtimeSettings, scanBias),
         rSquared: metrics.rSquared,
         slope: metrics.slope,
         slopePctPerBar: metrics.slopePctPerBar,
@@ -157,6 +168,7 @@ export async function runScan(admin: any, timeframe: string, mode = 'trend') {
         isScanning: true,
         activeTimeframe: timeframe,
         activeMode: scanMode,
+        activeBias: scanBias,
         progress: { completed, total, percent: total ? Math.round((completed / total) * 100) : 0 },
       });
     },
@@ -180,7 +192,7 @@ export async function runScan(admin: any, timeframe: string, mode = 'trend') {
     baseResults
       .map((result) => {
         const patterns = patternDetails.get(result.symbol) || null;
-        const actionableHarmonic = getActionableHarmonic(patterns);
+        const actionableHarmonic = getActionableHarmonic(patterns, scanBias);
         const detectedPatterns = patternMap.get(result.symbol) || [];
 
         if (scanMode === 'harmonic' && !actionableHarmonic) {
@@ -203,6 +215,7 @@ export async function runScan(admin: any, timeframe: string, mode = 'trend') {
   const scannedAt = new Date().toISOString();
   const meta = {
     mode: scanMode,
+    bias: scanBias,
     timeframe,
     totalSymbols: symbols.length,
     filteredCount: results.length,
@@ -214,20 +227,28 @@ export async function runScan(admin: any, timeframe: string, mode = 'trend') {
     timeframe,
     totalSymbols: symbols.length,
     filteredCount: results.length,
-    params: { mode: scanMode, interval: config.interval, limit: config.limit, requestsPerSecond: REQUESTS_PER_SECOND, runtimeSettings },
+    params: { mode: scanMode, bias: scanBias, interval: config.interval, limit: config.limit, requestsPerSecond: REQUESTS_PER_SECOND, runtimeSettings },
     scannedAt,
     results,
   });
+
+  const previousScanner = (await getAppState(admin, 'scanner')) || {};
+  const previousCacheMeta = previousScanner.cacheMeta || {};
+  const nextCacheMeta =
+    scanMode === 'trend' && scanBias === 'long'
+      ? { ...previousCacheMeta, [timeframe]: meta, [`${timeframe}:${scanMode}:${scanBias}`]: meta }
+      : { ...previousCacheMeta, [`${timeframe}:${scanMode}:${scanBias}`]: meta };
 
   await setAppState(admin, 'scanner', {
     isScanning: false,
     activeTimeframe: null,
     activeMode: 'trend',
+    activeBias: 'long',
     lastScanAt: scannedAt,
     nextScanAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     lastDurationMs: meta.durationMs,
     progress: { completed: symbols.length, total: symbols.length, percent: 100 },
-    cacheMeta: scanMode === 'trend' ? { [timeframe]: meta, [`${timeframe}:${scanMode}`]: meta } : { [`${timeframe}:${scanMode}`]: meta },
+    cacheMeta: nextCacheMeta,
   });
 
   return { results, meta };

@@ -23,12 +23,26 @@ const MODE_OPTIONS = [
   },
 ];
 
+const BIAS_OPTIONS = [
+  {
+    key: 'long',
+    label: '做多雷達',
+    description: '優先找穩定上升、適合順勢做多的標的。',
+  },
+  {
+    key: 'short',
+    label: '做空雷達',
+    description: '改抓穩定下行、反彈不深的空頭候選。',
+  },
+];
+
 const COPY = {
   eyebrow: '\u7be9\u9078\u689d\u4ef6',
   title: '\u5148\u628a\u5e63\u6d77\u5feb\u901f\u7e2e\u5c0f',
   description:
     '\u5148\u7528\u5206\u6578\u3001\u6642\u9593\u6846\u67b6\u548c\u5f62\u614b\u504f\u597d\u7be9\u6389\u96dc\u8a0a\uff0c\u518d\u628a\u7126\u9ede\u653e\u5728\u6700\u503c\u5f97\u6253\u958b\u5716\u770b\u7684 5 \u5230 10 \u500b\u5019\u9078\u3002',
   mode: '\u6383\u63cf\u6a21\u5f0f',
+  bias: '\u4ea4\u6613\u65b9\u5411',
   timeframe: '\u6642\u9593\u6846\u67b6',
   minScore: '\u6700\u4f4e\u5206\u6578',
   minScoreHarmonic: '\u8da8\u52e2\u5e95\u5206',
@@ -76,6 +90,29 @@ export default function FilterPanel({ filters, onChange }) {
               >
                 <p className="text-sm font-medium">{mode.label}</p>
                 <p className="mt-1 text-xs text-slate-400">{mode.description}</p>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <p className="mb-3 text-sm font-medium text-slate-100">{COPY.bias}</p>
+          <div className="grid grid-cols-2 gap-2">
+            {BIAS_OPTIONS.map((bias) => (
+              <button
+                key={bias.key}
+                type="button"
+                onClick={() => onChange({ bias: bias.key })}
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  filters.bias === bias.key
+                    ? bias.key === 'short'
+                      ? 'border-rose-400/35 bg-rose-400/12 text-rose-50'
+                      : 'border-emerald-400/35 bg-emerald-400/12 text-emerald-50'
+                    : 'border-white/10 bg-white/5 text-slate-300 hover:border-white/20 hover:text-white'
+                }`}
+              >
+                <p className="text-sm font-medium">{bias.label}</p>
+                <p className="mt-1 text-xs text-slate-400">{bias.description}</p>
               </button>
             ))}
           </div>

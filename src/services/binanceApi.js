@@ -98,14 +98,15 @@ export async function updateRuntimeSettings(settings) {
   });
 }
 
-export async function getScanResults({ timeframe = '1h', minScore = 55, patterns = [], force = false, mode = 'trend' } = {}) {
-  const data = await invokeTrendApi('scan-results', { timeframe, minScore, patterns, force, mode });
+export async function getScanResults({ timeframe = '1h', minScore = 55, patterns = [], force = false, mode = 'trend', bias = 'long' } = {}) {
+  const data = await invokeTrendApi('scan-results', { timeframe, minScore, patterns, force, mode, bias });
   if (data) return data;
 
   const params = new URLSearchParams();
   params.set('timeframe', timeframe);
   params.set('minScore', String(minScore));
   params.set('mode', mode);
+  params.set('bias', bias);
 
   if (force) {
     params.set('force', '1');
@@ -118,18 +119,20 @@ export async function getScanResults({ timeframe = '1h', minScore = 55, patterns
 
 export async function triggerScan(timeframe = '1h') {
   let mode = 'trend';
+  let bias = 'long';
 
   if (typeof timeframe === 'object' && timeframe !== null) {
     mode = timeframe.mode || 'trend';
+    bias = timeframe.bias || 'long';
     timeframe = timeframe.timeframe || '1h';
   }
 
-  const data = await invokeTrendApi('run-scan', { timeframe, mode });
+  const data = await invokeTrendApi('run-scan', { timeframe, mode, bias });
   if (data) return data;
 
   return requestJson('/scan', {
     method: 'POST',
-    body: JSON.stringify({ timeframe, mode }),
+    body: JSON.stringify({ timeframe, mode, bias }),
   });
 }
 

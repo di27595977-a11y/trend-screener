@@ -8,7 +8,7 @@ import TradeAdvicePanel from './TradeAdvicePanel';
 import { buildBinanceChartUrl, buildTradingViewUrl, getSymbolCandles, getSymbolOverview } from '../services/binanceApi';
 import wsManager from '../services/wsManager';
 import { detectAllPatterns } from '../services/patternDetection';
-import { evaluateTrend } from '../services/indicators';
+import { evaluateTrend, normalizeTradeBias } from '../services/indicators';
 import { calculateTrendScore } from '../utils/scoring';
 import { generateTradeAdvice } from '../lib/tradeAdvisor';
 
@@ -182,17 +182,29 @@ function harmonicStatusTone(statusKey) {
   );
 }
 
-function fallbackOverview(candles) {
+function fallbackOverview(candles, bias = 'long') {
   const recent = candles.slice(-24);
   const metrics = evaluateTrend(recent);
 
   return {
-    trendScore: calculateTrendScore(metrics),
+    trendScore: calculateTrendScore(metrics, undefined, bias),
     rSquared: metrics.rSquared,
     priceChangePct: metrics.priceChange,
     entryPrice: recent.at(-1)?.close ?? null,
     timeframe: '1h',
+    setupSide: bias,
   };
+}
+
+function pickOverviewForBias(overviewResponse, initialCoin, candles, bias = 'long') {
+  const preferredTimeframe = initialCoin?.timeframe || '1h';
+  const results = overviewResponse?.results || [];
+  const matchingTimeframe = results.find(
+    (item) => (item.setup_side ?? item.setupSide ?? 'long') === bias && item.timeframe === preferredTimeframe,
+  );
+  const matchingBias = results.find((item) => (item.setup_side ?? item.setupSide ?? 'long') === bias);
+
+  return matchingTimeframe || matchingBias || overviewResponse?.best || initialCoin || fallbackOverview(candles, bias);
 }
 
 function buildLevelSummary(patterns) {
@@ -337,6 +349,7 @@ export default function ChartDetail() {
   const { symbol } = useParams();
   const location = useLocation();
   const initialCoin = location.state?.coin || null;
+  const setupSide = normalizeTradeBias(initialCoin?.setupSide || 'long');
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
@@ -457,7 +470,7 @@ export default function ChartDetail() {
         const nextCandles = candleResponse.candles || [];
 
         setCandles(nextCandles);
-        setOverview(overviewResponse.best || initialCoin || fallbackOverview(nextCandles));
+        setOverview(pickOverviewForBias(overviewResponse, initialCoin, nextCandles, setupSide));
         setPatterns(detectAllPatterns(nextCandles));
         setLivePrice(nextCandles.at(-1)?.close ?? null);
         setError('');
@@ -479,7 +492,7 @@ export default function ChartDetail() {
     return () => {
       cancelled = true;
     };
-  }, [initialCoin, symbol]);
+  }, [initialCoin, setupSide, symbol]);
 
   useEffect(() => {
     if (!candles.length || !candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) {
@@ -566,7 +579,7 @@ export default function ChartDetail() {
     shouldRecalculatePatternsRef.current = false;
   }, [candles]);
 
-  const scoreSource = overview || fallbackOverview(candles);
+  const scoreSource = overview || fallbackOverview(candles, setupSide);
   const tradeAdvice = useMemo(() => {
     if (!patterns) {
       return null;
@@ -577,17 +590,24 @@ export default function ChartDetail() {
 
     return generateTradeAdvice({
       currentPrice: livePrice ?? candles.at(-1)?.close ?? scoreSource?.entryPrice,
-      positionScore: effectiveMetrics.positionScore ?? scoreSource?.positionScore,
-      score: scoreSource?.trendScore ?? (currentMetrics ? calculateTrendScore(currentMetrics) : null),
-      priceChangePercent: effectiveMetrics.priceChange ?? scoreSource?.priceChangePct,
+      positionScore:
+        setupSide === 'short'
+          ? 1 - (effectiveMetrics.positionScore ?? scoreSource?.positionScore ?? 0.5)
+          : effectiveMetrics.positionScore ?? scoreSource?.positionScore,
+      score: scoreSource?.trendScore ?? (currentMetrics ? calculateTrendScore(currentMetrics, undefined, setupSide) : null),
+      priceChangePercent:
+        setupSide === 'short'
+          ? -1 * (effectiveMetrics.priceChange ?? scoreSource?.priceChangePct ?? 0)
+          : effectiveMetrics.priceChange ?? scoreSource?.priceChangePct,
       patterns: buildAdvisorPatterns(patterns),
       supportLevels: levels.supportLevels,
       resistanceLevels: levels.resistanceLevels,
-      pullbackRatio: effectiveMetrics.pullbackRatio,
+      pullbackRatio: setupSide === 'short' ? effectiveMetrics.bounceRatio : effectiveMetrics.pullbackRatio,
       rSquared: effectiveMetrics.rSquared ?? scoreSource?.rSquared,
-      volumeRatio: effectiveMetrics.volumeRatio,
+      volumeRatio: setupSide === 'short' ? effectiveMetrics.bearishVolumeRatio : effectiveMetrics.volumeRatio,
+      modelBias: setupSide,
     });
-  }, [candles, currentMetrics, livePrice, patterns, scoreSource]);
+  }, [candles, currentMetrics, livePrice, patterns, scoreSource, setupSide]);
 
   return (
     <div className="space-y-6">
@@ -602,7 +622,7 @@ export default function ChartDetail() {
               <h2 className="font-mono text-3xl font-semibold text-white">{symbol}</h2>
               <ScoreBadge score={scoreSource?.trendScore || 0} />
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-200">
-                {`${scoreSource?.timeframe?.toUpperCase() || '1H'} ${COPY.scoringMode}`}
+                {`${scoreSource?.timeframe?.toUpperCase() || '1H'} ${setupSide === 'short' ? '做空' : '做多'}${COPY.scoringMode}`}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-4 font-mono text-sm text-slate-300">

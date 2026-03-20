@@ -21,7 +21,7 @@ export default function CoinCard({ coin, livePrice, onSelect }) {
   const fallbackLevels = buildFallbackLevels(coin.sparkline, currentPrice);
   const advice = generateTradeAdvice({
     currentPrice,
-    positionScore: coin.positionScore,
+    positionScore: coin.setupSide === 'short' ? 1 - coin.positionScore : coin.positionScore,
     score: coin.trendScore,
     priceChangePercent: liveChange,
     patterns: parsePatternSummary(coin.detectedPatterns),
@@ -30,6 +30,7 @@ export default function CoinCard({ coin, livePrice, onSelect }) {
     pullbackRatio: coin.pullbackRatio,
     rSquared: coin.rSquared,
     volumeRatio: coin.volumeRatio,
+    modelBias: coin.setupSide || 'long',
   });
 
   return (

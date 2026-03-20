@@ -23,6 +23,22 @@ select cron.schedule(
 );
 
 select cron.schedule(
+  'trend-screener-scan-1h-short',
+  '1-56/5 * * * *',
+  $$
+  select
+    net.http_post(
+      url:= (select decrypted_secret from vault.decrypted_secrets where name = 'project_url') || '/functions/v1/trend-api',
+      headers:=jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'publishable_key')
+      ),
+      body:='{"action":"run-scan","timeframe":"1h","bias":"short"}'::jsonb
+    );
+  $$
+);
+
+select cron.schedule(
   'trend-screener-scan-4h',
   '2-57/5 * * * *',
   $$
@@ -34,6 +50,22 @@ select cron.schedule(
         'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'publishable_key')
       ),
       body:='{"action":"run-scan","timeframe":"4h"}'::jsonb
+    );
+  $$
+);
+
+select cron.schedule(
+  'trend-screener-scan-4h-short',
+  '3-58/5 * * * *',
+  $$
+  select
+    net.http_post(
+      url:= (select decrypted_secret from vault.decrypted_secrets where name = 'project_url') || '/functions/v1/trend-api',
+      headers:=jsonb_build_object(
+        'Content-Type', 'application/json',
+        'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'publishable_key')
+      ),
+      body:='{"action":"run-scan","timeframe":"4h","bias":"short"}'::jsonb
     );
   $$
 );

@@ -82,6 +82,7 @@ Deno.serve(async (request) => {
         scanner: scanner || {
           isScanning: false,
           activeTimeframe: null,
+          activeBias: 'long',
           lastScanAt: null,
           nextScanAt: null,
           lastDurationMs: null,
@@ -108,14 +109,15 @@ Deno.serve(async (request) => {
     if (action === 'scan-results') {
       const timeframe = body.timeframe || '1h';
       const mode = body.mode || 'trend';
+      const bias = body.bias || 'long';
       const settings = await getRuntimeSettings(admin);
       const minScore = body.minScore != null ? Number.parseInt(body.minScore, 10) : settings.scan.minScoreDefault;
       const patterns = Array.isArray(body.patterns) ? body.patterns : [];
       const force = Boolean(body.force);
-      const snapshot = force ? await runScan(admin, timeframe, mode) : await getLatestScanResults(admin, timeframe, mode);
+      const snapshot = force ? await runScan(admin, timeframe, mode, bias) : await getLatestScanResults(admin, timeframe, mode, bias);
 
       if (!force && !snapshot.results?.length) {
-        const refreshed = await runScan(admin, timeframe, mode);
+        const refreshed = await runScan(admin, timeframe, mode, bias);
         return json({ results: filterResults(refreshed.results, minScore, patterns, mode), meta: refreshed.meta });
       }
 
@@ -123,6 +125,7 @@ Deno.serve(async (request) => {
         results: filterResults(snapshot.results || [], minScore, patterns, mode),
         meta: snapshot.meta || {
           mode,
+          bias,
           timeframe,
           totalSymbols: snapshot.snapshot?.total_symbols || 0,
           filteredCount: snapshot.results?.length || 0,
@@ -133,7 +136,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'run-scan') {
-      return json(await runScan(admin, body.timeframe || '1h', body.mode || 'trend'));
+      return json(await runScan(admin, body.timeframe || '1h', body.mode || 'trend', body.bias || 'long'));
     }
 
     if (action === 'symbol-overview') {

@@ -12,6 +12,7 @@ import wsManager from '../services/wsManager';
 
 const DEFAULT_FILTERS = {
   mode: 'trend',
+  bias: 'long',
   timeframe: '1h',
   minScore: DEFAULT_RUNTIME_SETTINGS.scan.minScoreDefault,
   search: '',
@@ -62,24 +63,30 @@ function averageScore(rows) {
   return Math.round((total / rows.length) * 10) / 10;
 }
 
-function formatCandidatesDescription(totalSymbols, mode) {
+function formatBiasLabel(bias) {
+  return bias === 'short' ? '\u7a7a\u982d' : '\u591a\u982d';
+}
+
+function formatCandidatesDescription(totalSymbols, mode, bias) {
+  const biasLabel = formatBiasLabel(bias);
+
   if (mode === 'harmonic') {
-    return `\u5f9e ${totalSymbols || '--'} \u500b\u5408\u7d04\u88e1\u512a\u5148\u6311\u51fa\u53ef\u64cd\u4f5c\u7684 XABCD \u8ae7\u6ce2\u7d50\u69cb\u3002`;
+    return `\u5f9e ${totalSymbols || '--'} \u500b\u5408\u7d04\u88e1\u512a\u5148\u6311\u51fa\u53ef\u64cd\u4f5c\u7684 ${biasLabel} XABCD \u8ae7\u6ce2\u7d50\u69cb\u3002`;
   }
 
   if (mode === 'hybrid') {
-    return `\u5f9e ${totalSymbols || '--'} \u500b\u5168\u5e02\u5834\u5e63\u7a2e\u88e1\u540c\u6642\u770b\u8da8\u52e2\u8207\u8ae7\u6ce2\u8a0a\u865f\u3002`;
+    return `\u5f9e ${totalSymbols || '--'} \u500b\u5168\u5e02\u5834\u5e63\u7a2e\u88e1\u540c\u6642\u770b ${biasLabel}\u8da8\u52e2\u8207\u8ae7\u6ce2\u8a0a\u865f\u3002`;
   }
 
-  return `\u5f9e ${totalSymbols || '--'} \u500b\u5168\u5e02\u5834\u5e63\u7a2e\u88e1\u5feb\u901f\u7e2e\u5c0f\u5230\u5c11\u6578\u5019\u9078\u3002`;
+  return `\u5f9e ${totalSymbols || '--'} \u500b\u5168\u5e02\u5834\u5e63\u7a2e\u88e1\u5feb\u901f\u7e2e\u5c0f\u5230\u5c11\u6578${biasLabel}\u5019\u9078\u3002`;
 }
 
-function formatTopDescription(bestRow, mode) {
+function formatTopDescription(bestRow, mode, bias) {
   if (!bestRow) {
     return mode === 'harmonic'
-      ? '\u76ee\u524d\u9084\u6c92\u6709\u7b26\u5408\u689d\u4ef6\u7684\u8ae7\u6ce2\u5019\u9078'
+      ? `\u76ee\u524d\u9084\u6c92\u6709\u7b26\u5408\u689d\u4ef6\u7684${formatBiasLabel(bias)}\u8ae7\u6ce2\u5019\u9078`
       : mode === 'hybrid'
-        ? '\u76ee\u524d\u9084\u6c92\u6709\u7b26\u5408\u8da8\u52e2 / \u8ae7\u6ce2\u7684\u6df7\u5408\u5019\u9078'
+        ? `\u76ee\u524d\u9084\u6c92\u6709\u7b26\u5408${formatBiasLabel(bias)}\u8da8\u52e2 / \u8ae7\u6ce2\u7684\u6df7\u5408\u5019\u9078`
         : COPY.noBest;
   }
 
@@ -184,6 +191,7 @@ export default function Dashboard() {
           minScore: filters.minScore,
           patterns: toPatternFilterList(filters.patterns),
           mode: filters.mode,
+          bias: filters.bias,
           force,
         });
 
@@ -217,7 +225,7 @@ export default function Dashboard() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [filters.mode, filters.timeframe, filters.minScore, filters.patterns]);
+  }, [filters.mode, filters.bias, filters.timeframe, filters.minScore, filters.patterns]);
 
   const visibleRows = rows.filter((row) => {
     if (deferredSearch && !row.symbol.includes(deferredSearch)) {
@@ -233,9 +241,10 @@ export default function Dashboard() {
     setRefreshing(true);
 
     try {
-      await triggerScan({ timeframe: filters.timeframe, mode: filters.mode });
+      await triggerScan({ timeframe: filters.timeframe, mode: filters.mode, bias: filters.bias });
       const snapshot = await loadDashboardSnapshot({
         mode: filters.mode,
+        bias: filters.bias,
         timeframe: filters.timeframe,
         minScore: filters.minScore,
         patterns: toPatternFilterList(filters.patterns),
@@ -266,9 +275,10 @@ export default function Dashboard() {
         minScore: getModeDefaultMinScore(current.mode, nextSettings),
       }));
       setSettingsSavedAt(new Date().toISOString());
-      await triggerScan({ timeframe: filters.timeframe, mode: filters.mode });
+      await triggerScan({ timeframe: filters.timeframe, mode: filters.mode, bias: filters.bias });
       const snapshot = await loadDashboardSnapshot({
         mode: filters.mode,
+        bias: filters.bias,
         timeframe: filters.timeframe,
         minScore: getModeDefaultMinScore(filters.mode, nextSettings),
         patterns: toPatternFilterList(filters.patterns),
@@ -398,6 +408,8 @@ export default function Dashboard() {
         <SymbolLookupPanel
           settings={strategySettings}
           status={status}
+          mode={filters.mode}
+          bias={filters.bias}
           onOpenChart={(symbol) => navigate(`/chart/${symbol}`)}
         />
 
@@ -405,7 +417,7 @@ export default function Dashboard() {
           <div className="panel-soft rounded-[24px] px-5 py-5">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.candidates}</p>
             <p className="mt-3 font-mono text-3xl text-white">{visibleRows.length}</p>
-            <p className="mt-2 text-sm text-slate-300">{formatCandidatesDescription(meta.totalSymbols, filters.mode)}</p>
+            <p className="mt-2 text-sm text-slate-300">{formatCandidatesDescription(meta.totalSymbols, filters.mode, filters.bias)}</p>
           </div>
           <div className="panel-soft rounded-[24px] px-5 py-5">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.averageScore}</p>
@@ -417,7 +429,7 @@ export default function Dashboard() {
           <div className="panel-soft rounded-[24px] px-5 py-5 sm:col-span-2 xl:col-span-1">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.topSetup}</p>
             <p className="mt-3 font-mono text-3xl text-white">{bestRow?.symbol || '--'}</p>
-            <p className="mt-2 text-sm text-slate-300">{formatTopDescription(bestRow, filters.mode)}</p>
+            <p className="mt-2 text-sm text-slate-300">{formatTopDescription(bestRow, filters.mode, filters.bias)}</p>
           </div>
         </div>
 

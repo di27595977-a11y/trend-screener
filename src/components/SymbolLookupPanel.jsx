@@ -139,7 +139,7 @@ function TimeframeAnalysisCard({ analysis }) {
   );
 }
 
-export default function SymbolLookupPanel({ settings, status, onOpenChart }) {
+export default function SymbolLookupPanel({ settings, status, mode = 'trend', bias = 'long', onOpenChart }) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -153,7 +153,7 @@ export default function SymbolLookupPanel({ settings, status, onOpenChart }) {
     setError('');
 
     try {
-      const analysis = await analyzeSymbol(query, { settings, scannerStatus: status });
+      const analysis = await analyzeSymbol(query, { settings, scannerStatus: status, mode, bias });
       setResult(analysis);
     } catch (analysisError) {
       setResult(null);

@@ -49,11 +49,13 @@ app.get('/api/scan', async (request, response, next) => {
         : [];
     const timeframe = request.query.timeframe || '1h';
     const mode = request.query.mode || 'trend';
+    const bias = request.query.bias || 'long';
     const minScore = request.query.minScore != null ? Number.parseInt(request.query.minScore, 10) : undefined;
     const force = request.query.force === '1';
     const result = await scanJob.getResults({
       timeframe,
       mode,
+      bias,
       minScore,
       patterns,
       force,
@@ -68,12 +70,13 @@ app.get('/api/scan', async (request, response, next) => {
 app.post('/api/scan', (request, response) => {
   const timeframe = request.body?.timeframe || '1h';
   const mode = request.body?.mode || 'trend';
+  const bias = request.body?.bias || 'long';
 
-  scanJob.scanTimeframe(timeframe, { force: true, mode }).catch((error) => {
+  scanJob.scanTimeframe(timeframe, { force: true, mode, bias }).catch((error) => {
     console.error('Manual scan failed', error);
   });
 
-  response.status(202).json({ ok: true, timeframe, mode });
+  response.status(202).json({ ok: true, timeframe, mode, bias });
 });
 
 app.get('/api/scan/:symbol', async (request, response, next) => {

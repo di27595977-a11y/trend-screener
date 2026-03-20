@@ -60,6 +60,10 @@ function toBacktestInsert(resultRow) {
   };
 }
 
+function normalizeSnapshotBias(params = {}) {
+  return params?.bias === 'short' ? 'short' : 'long';
+}
+
 function mergeBacktestRecords(backtests, resultsById) {
   return backtests
     .map((backtest) => {
@@ -184,17 +188,22 @@ export function createPersistenceLayer() {
     mode,
 
     async recordScan({ timeframe, totalSymbols, filteredCount, params, results, scannedAt = new Date().toISOString() }) {
+      const scanBias = normalizeSnapshotBias(params);
+
       if (!supabase) {
         const snapshot = toSnapshotRow(timeframe, totalSymbols, filteredCount, params, scannedAt);
         const resultRows = results.map((result) => toResultRow(snapshot.id, result, scannedAt));
-        const backtestRows = resultRows.map((resultRow) => ({
-          id: crypto.randomUUID(),
-          ...toBacktestInsert(resultRow),
-          timeframe: resultRow.timeframe,
-          trend_score: resultRow.trend_score,
-          detected_patterns: resultRow.detected_patterns,
-          created_at: resultRow.created_at,
-        }));
+        const backtestRows =
+          scanBias === 'short'
+            ? []
+            : resultRows.map((resultRow) => ({
+                id: crypto.randomUUID(),
+                ...toBacktestInsert(resultRow),
+                timeframe: resultRow.timeframe,
+                trend_score: resultRow.trend_score,
+                detected_patterns: resultRow.detected_patterns,
+                created_at: resultRow.created_at,
+              }));
 
         memory.snapshots.unshift(snapshot);
         memory.results.unshift(...resultRows);
@@ -240,7 +249,7 @@ export function createPersistenceLayer() {
           throw resultError;
         }
 
-        if (insertedResults?.length) {
+        if (insertedResults?.length && scanBias !== 'short') {
           const backtestPayload = insertedResults.map((resultRow) => ({
             scan_result_id: resultRow.id,
             symbol: resultRow.symbol,
@@ -257,10 +266,13 @@ export function createPersistenceLayer() {
       return snapshotData;
     },
 
-    async getLatestScanResults(timeframe, mode = 'trend') {
+    async getLatestScanResults(timeframe, mode = 'trend', bias = 'long') {
       if (!supabase) {
         const snapshot = memory.snapshots.find(
-          (item) => item.timeframe === timeframe && ((item.params?.mode || 'trend') === mode),
+          (item) =>
+            item.timeframe === timeframe &&
+            ((item.params?.mode || 'trend') === mode) &&
+            normalizeSnapshotBias(item.params) === normalizeSnapshotBias({ bias }),
         );
 
         if (!snapshot) {
@@ -279,7 +291,7 @@ export function createPersistenceLayer() {
         .from('scan_snapshots')
         .select('*')
         .eq('timeframe', timeframe)
-        .contains('params', { mode })
+        .contains('params', { mode, bias: normalizeSnapshotBias({ bias }) })
         .order('scanned_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -302,7 +314,13 @@ export function createPersistenceLayer() {
         throw resultError;
       }
 
-      return { snapshot, results: results || [] };
+      return {
+        snapshot,
+        results: (results || []).map((row) => ({
+          ...row,
+          setup_side: normalizeSnapshotBias(snapshot.params),
+        })),
+      };
     },
 
     async getLatestSymbolOverview(symbol) {
@@ -312,8 +330,18 @@ export function createPersistenceLayer() {
         const rows = memory.results
           .filter((result) => result.symbol === upperSymbol)
           .sort((left, right) => new Date(right.created_at) - new Date(left.created_at));
-
-        const uniqueByTimeframe = Array.from(new Map(rows.map((row) => [row.timeframe, row])).values());
+        const snapshotsById = new Map(memory.snapshots.map((snapshot) => [snapshot.id, snapshot]));
+        const decoratedRows = rows.map((row) => {
+          const snapshot = snapshotsById.get(row.snapshot_id);
+          return {
+            ...row,
+            setup_side: normalizeSnapshotBias(snapshot?.params),
+            scan_mode: snapshot?.params?.mode || 'trend',
+          };
+        });
+        const uniqueByTimeframe = Array.from(
+          new Map(decoratedRows.map((row) => [`${row.timeframe}:${row.scan_mode}:${row.setup_side}`, row])).values(),
+        );
         const best = [...uniqueByTimeframe].sort((left, right) => right.trend_score - left.trend_score)[0] || null;
 
         return {
@@ -343,7 +371,30 @@ export function createPersistenceLayer() {
         throw error;
       }
 
-      const uniqueByTimeframe = Array.from(new Map((rows || []).map((row) => [row.timeframe, row])).values());
+      const snapshotIds = Array.from(new Set((rows || []).map((row) => row.snapshot_id).filter(Boolean)));
+      let snapshotsById = new Map();
+
+      if (snapshotIds.length) {
+        const { data: snapshots, error: snapshotError } = await supabase.from('scan_snapshots').select('*').in('id', snapshotIds);
+
+        if (snapshotError) {
+          throw snapshotError;
+        }
+
+        snapshotsById = new Map((snapshots || []).map((snapshot) => [snapshot.id, snapshot]));
+      }
+
+      const decoratedRows = (rows || []).map((row) => {
+        const snapshot = snapshotsById.get(row.snapshot_id);
+        return {
+          ...row,
+          setup_side: normalizeSnapshotBias(snapshot?.params),
+          scan_mode: snapshot?.params?.mode || 'trend',
+        };
+      });
+      const uniqueByTimeframe = Array.from(
+        new Map(decoratedRows.map((row) => [`${row.timeframe}:${row.scan_mode}:${row.setup_side}`, row])).values(),
+      );
       const best = [...uniqueByTimeframe].sort((left, right) => right.trend_score - left.trend_score)[0] || null;
 
       return {

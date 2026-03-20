@@ -1,7 +1,7 @@
 import dotenv from 'dotenv';
 import { pathToFileURL } from 'node:url';
 import { DEFAULT_RUNTIME_SETTINGS } from '../src/config/runtimeSettings.js';
-import { SCAN_TIMEFRAME_CONFIG, buildSparkline, evaluateTrend, passesTrendThresholds } from '../src/services/indicators.js';
+import { SCAN_TIMEFRAME_CONFIG, buildSparkline, evaluateTrend, normalizeTradeBias, passesTrendThresholds } from '../src/services/indicators.js';
 import { detectAllPatterns, summarizePatterns } from '../src/services/patternDetection.js';
 import { calculateTrendScore } from '../src/utils/scoring.js';
 import { createPersistenceLayer } from './persistence.js';
@@ -55,6 +55,10 @@ function normalizeScanMode(mode = 'trend') {
   return ['trend', 'harmonic', 'hybrid'].includes(mode) ? mode : 'trend';
 }
 
+function normalizeScanBias(bias = 'long') {
+  return normalizeTradeBias(bias);
+}
+
 function getPatternHarmonics(patterns) {
   if (!patterns) {
     return [];
@@ -67,8 +71,11 @@ function getPatternHarmonics(patterns) {
   return patterns.harmonic ? [patterns.harmonic] : [];
 }
 
-function getActionableHarmonic(patterns) {
-  return getPatternHarmonics(patterns).find((pattern) => ACTIVE_HARMONIC_STATUSES.has(pattern.status?.key)) || null;
+function getActionableHarmonic(patterns, bias = 'long') {
+  const targetDirection = normalizeScanBias(bias) === 'short' ? 'bearish' : 'bullish';
+  return getPatternHarmonics(patterns).find(
+    (pattern) => pattern.direction === targetDirection && ACTIVE_HARMONIC_STATUSES.has(pattern.status?.key),
+  ) || null;
 }
 
 function sortResultsForMode(results, mode) {
@@ -108,11 +115,12 @@ export async function fetchCandles(symbol, interval, limit, extraParams = {}) {
   return data.map(normalizeKline);
 }
 
-function toScanResult(symbol, timeframe, candles, metrics) {
+function toScanResult(symbol, timeframe, candles, metrics, bias = 'long', settings = DEFAULT_RUNTIME_SETTINGS) {
   return {
     symbol,
     timeframe,
-    trendScore: calculateTrendScore(metrics),
+    setupSide: normalizeScanBias(bias),
+    trendScore: calculateTrendScore(metrics, settings, bias),
     rSquared: metrics.rSquared,
     slope: metrics.slope,
     slopePctPerBar: metrics.slopePctPerBar,
@@ -203,6 +211,7 @@ export class ScanJob {
       isScanning: false,
       activeTimeframe: null,
       activeMode: 'trend',
+      activeBias: 'long',
       lastScanAt: null,
       nextScanAt: new Date(Date.now() + scanIntervalMs).toISOString(),
       lastDurationMs: null,
@@ -255,24 +264,33 @@ export class ScanJob {
   }
 
   async refreshAll() {
-    await this.scanTimeframe('1h', { force: true, mode: 'trend' });
-    await this.scanTimeframe('4h', { force: true, mode: 'trend' });
+    for (const timeframe of ['1h', '4h']) {
+      for (const bias of ['long', 'short']) {
+        await this.scanTimeframe(timeframe, { force: true, mode: 'trend', bias });
+      }
+    }
   }
 
-  async scanTimeframe(timeframe, { force = false, mode = 'trend' } = {}) {
+  async scanTimeframe(timeframe, { force = false, mode = 'trend', bias = 'long' } = {}) {
     if (!SCAN_TIMEFRAME_CONFIG[timeframe]) {
       throw new Error(`Unsupported timeframe: ${timeframe}`);
     }
 
     const scanMode = normalizeScanMode(mode);
-    const cacheKey = `${timeframe}:${scanMode}`;
+    const scanBias = normalizeScanBias(bias);
+    const cacheKey = `${timeframe}:${scanMode}:${scanBias}`;
     const cached = this.cache.get(cacheKey);
 
     if (!force && cached && Date.now() - new Date(cached.meta.scannedAt).getTime() < this.scanIntervalMs) {
       return cached;
     }
 
-    if (this.status.isScanning && this.status.activeTimeframe === timeframe && this.status.activeMode === scanMode) {
+    if (
+      this.status.isScanning &&
+      this.status.activeTimeframe === timeframe &&
+      this.status.activeMode === scanMode &&
+      this.status.activeBias === scanBias
+    ) {
       return cached || { results: [], meta: { timeframe } };
     }
 
@@ -284,6 +302,7 @@ export class ScanJob {
     this.status.isScanning = true;
     this.status.activeTimeframe = timeframe;
     this.status.activeMode = scanMode;
+    this.status.activeBias = scanBias;
     this.status.progress = { completed: 0, total: symbols.length, percent: 0 };
 
     const baseResults = await runBatches(
@@ -297,15 +316,14 @@ export class ScanJob {
         }
 
         const metrics = evaluateTrend(candles);
-        const passesTrend = passesTrendThresholds(metrics, runtimeSettings.thresholds);
+        const passesTrend = passesTrendThresholds(metrics, runtimeSettings.thresholds, scanBias);
 
         if (scanMode === 'trend' && !passesTrend) {
           return null;
         }
 
         return {
-          ...toScanResult(symbol, timeframe, candles, metrics),
-          trendScore: calculateTrendScore(metrics, runtimeSettings),
+          ...toScanResult(symbol, timeframe, candles, metrics, scanBias, runtimeSettings),
           passesTrend,
         };
       },
@@ -337,7 +355,7 @@ export class ScanJob {
       baseResults
         .map((result) => {
           const patterns = patternDetails.get(result.symbol) || null;
-          const actionableHarmonic = getActionableHarmonic(patterns);
+          const actionableHarmonic = getActionableHarmonic(patterns, scanBias);
           const detectedPatterns = patternSummaries.get(result.symbol) || [];
 
           if (scanMode === 'harmonic' && !actionableHarmonic) {
@@ -360,6 +378,7 @@ export class ScanJob {
     const scannedAt = new Date().toISOString();
     const meta = {
       mode: scanMode,
+      bias: scanBias,
       timeframe,
       totalSymbols: symbols.length,
       filteredCount: results.length,
@@ -369,7 +388,7 @@ export class ScanJob {
 
     this.cache.set(cacheKey, { results, meta });
     this.status.cacheMeta[cacheKey] = meta;
-    if (scanMode === 'trend') {
+    if (scanMode === 'trend' && scanBias === 'long') {
       this.status.cacheMeta[timeframe] = meta;
     }
     this.status.lastScanAt = scannedAt;
@@ -378,6 +397,7 @@ export class ScanJob {
     this.status.isScanning = false;
     this.status.activeTimeframe = null;
     this.status.activeMode = 'trend';
+    this.status.activeBias = 'long';
     this.status.progress = { completed: symbols.length, total: symbols.length, percent: 100 };
 
     await this.persistence?.recordScan({
@@ -386,6 +406,7 @@ export class ScanJob {
       filteredCount: results.length,
       params: {
         mode: scanMode,
+        bias: scanBias,
         interval: config.interval,
         limit: config.limit,
         requestsPerSecond: this.requestsPerSecond,
@@ -398,8 +419,8 @@ export class ScanJob {
     return { results, meta };
   }
 
-  async getResults({ timeframe = '1h', minScore, patterns = [], force = false, mode = 'trend' } = {}) {
-    const scan = await this.scanTimeframe(timeframe, { force, mode });
+  async getResults({ timeframe = '1h', minScore, patterns = [], force = false, mode = 'trend', bias = 'long' } = {}) {
+    const scan = await this.scanTimeframe(timeframe, { force, mode, bias });
     const runtimeSettings = (await this.persistence?.getRuntimeSettings?.()) || DEFAULT_RUNTIME_SETTINGS;
     const filteredResults = filterResults(scan.results, minScore ?? runtimeSettings.scan.minScoreDefault, patterns, mode);
 
@@ -417,9 +438,10 @@ if (isDirectRun) {
   const job = new ScanJob({ persistence });
   const timeframe = process.argv[2] || '1h';
   const mode = process.argv[3] || 'trend';
+  const bias = process.argv[4] || 'long';
 
   job
-    .scanTimeframe(timeframe, { force: true, mode })
+    .scanTimeframe(timeframe, { force: true, mode, bias })
     .then((result) => {
       console.log(JSON.stringify(result.meta, null, 2));
       console.log(`Candidates: ${result.results.length}`);
