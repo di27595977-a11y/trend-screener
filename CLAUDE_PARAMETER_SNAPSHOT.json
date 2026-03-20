@@ -22,8 +22,8 @@
     },
     "4h": {
       "interval": "4h",
-      "scanCandleLimit": 30,
-      "sparklineLimit": 30
+      "scanCandleLimit": 72,
+      "sparklineLimit": 72
     }
   },
   "trendThresholds": {

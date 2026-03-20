@@ -76,7 +76,7 @@ export default function CoinRow({ coin, livePrice, onSelect }) {
     currentPrice,
     positionScore: coin.positionScore,
     score: coin.trendScore,
-    priceChange: liveChange,
+    priceChangePercent: liveChange,
     patterns: parsePatternSummary(coin.detectedPatterns),
     supportLevels: fallbackLevels.supportLevels,
     resistanceLevels: fallbackLevels.resistanceLevels,

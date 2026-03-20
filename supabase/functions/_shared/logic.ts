@@ -28,7 +28,7 @@ type TrendMetrics = {
 
 export const SCAN_TIMEFRAME_CONFIG: Record<string, { interval: string; limit: number; sparkLimit: number }> = {
   '1h': { interval: '1h', limit: 24, sparkLimit: 24 },
-  '4h': { interval: '4h', limit: 30, sparkLimit: 30 },
+  '4h': { interval: '4h', limit: 72, sparkLimit: 72 },
 };
 
 function linearRegression(prices: number[]) {

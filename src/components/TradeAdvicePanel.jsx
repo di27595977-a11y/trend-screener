@@ -1,4 +1,5 @@
 import TradeSignalBadge from './TradeSignalBadge';
+import { formatTradePct, formatTradePrice } from '../lib/tradeAdvisor';
 
 const COPY = {
   title: '\u4ea4\u6613\u5efa\u8b70',
@@ -19,36 +20,19 @@ const CONFIDENCE_LABEL = {
   low: '\u4f4e',
 };
 
-function formatPrice(value) {
-  if (value == null || Number.isNaN(value)) {
-    return '--';
-  }
+function NumberCard({ label, value, basePrice, tone = 'neutral' }) {
+  const pctTone =
+    tone === 'danger'
+      ? 'text-rose-300'
+      : tone === 'success'
+        ? 'text-emerald-300'
+        : 'text-slate-400';
 
-  if (value >= 1000) {
-    return value.toLocaleString('zh-TW', { maximumFractionDigits: 2 });
-  }
-
-  if (value >= 1) {
-    return value.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  }
-
-  return value.toLocaleString('zh-TW', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
-}
-
-function formatDistance(target, base) {
-  if ([target, base].some((value) => value == null || Number.isNaN(value)) || base === 0) {
-    return '--';
-  }
-
-  return `${(((target - base) / base) * 100).toFixed(2)}%`;
-}
-
-function NumberCard({ label, value, currentPrice }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
       <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{label}</p>
-      <p className="mt-1 font-mono text-base text-white">{formatPrice(value)}</p>
-      <p className="mt-1 font-mono text-xs text-slate-400">{formatDistance(value, currentPrice)}</p>
+      <p className="mt-1 font-mono text-base text-white">{formatTradePrice(value)}</p>
+      <p className={`mt-1 font-mono text-xs ${pctTone}`}>{formatTradePct(value, basePrice)}</p>
     </div>
   );
 }
@@ -57,6 +41,9 @@ export default function TradeAdvicePanel({ advice, currentPrice }) {
   if (!advice) {
     return null;
   }
+
+  const basePrice = advice.entry ?? currentPrice;
+  const showLevels = advice.direction !== 'watch';
 
   return (
     <section className="panel rounded-[28px] px-5 py-5">
@@ -71,26 +58,30 @@ export default function TradeAdvicePanel({ advice, currentPrice }) {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right">
-          <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.riskReward}</p>
-          <p className="mt-1 font-mono text-lg text-white">{advice.riskReward != null ? `1 : ${advice.riskReward.toFixed(1)}` : '--'}</p>
-        </div>
+        {showLevels ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-right">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.riskReward}</p>
+            <p className="mt-1 font-mono text-lg text-white">{advice.riskReward != null ? `1 : ${advice.riskReward.toFixed(1)}` : '--'}</p>
+          </div>
+        ) : null}
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <NumberCard label={COPY.entry} value={advice.entry} currentPrice={currentPrice} />
-        <NumberCard label={COPY.sl} value={advice.sl} currentPrice={currentPrice} />
-        <NumberCard label={COPY.tp1} value={advice.tp1} currentPrice={currentPrice} />
-        <NumberCard label={COPY.tp2} value={advice.tp2} currentPrice={currentPrice} />
-      </div>
+      {showLevels ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <NumberCard label={COPY.entry} value={advice.entry} basePrice={basePrice} />
+          <NumberCard label={COPY.sl} value={advice.sl} basePrice={basePrice} tone="danger" />
+          <NumberCard label={COPY.tp1} value={advice.tp1} basePrice={basePrice} tone="success" />
+          <NumberCard label={COPY.tp2} value={advice.tp2} basePrice={basePrice} tone="success" />
+        </div>
+      ) : null}
 
       {advice.reasons?.length ? (
         <div className="mt-4">
           <p className="text-sm font-medium text-white">{COPY.reasons}</p>
           <div className="mt-3 space-y-2">
             {advice.reasons.map((reason) => (
-              <div key={reason} className="flex gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/8 px-4 py-3 text-sm text-emerald-50">
-                <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-300" />
+              <div key={reason} className="flex gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/8 px-4 py-3 text-sm text-slate-200">
+                <span className="text-emerald-300">●</span>
                 <span>{reason}</span>
               </div>
             ))}
@@ -105,8 +96,9 @@ export default function TradeAdvicePanel({ advice, currentPrice }) {
           <p className="text-sm font-medium text-white">{COPY.warnings}</p>
           <div className="mt-3 space-y-2">
             {advice.warnings.map((warning) => (
-              <div key={warning} className="rounded-2xl border border-amber-400/20 bg-amber-400/8 px-4 py-3 text-sm text-amber-50">
-                {warning}
+              <div key={warning} className="flex gap-2 rounded-2xl border border-amber-400/20 bg-amber-400/8 px-4 py-3 text-sm text-amber-200">
+                <span>⚠️</span>
+                <span>{warning.replace(/^\s*⚠️\s*/, '')}</span>
               </div>
             ))}
           </div>

@@ -2,7 +2,7 @@ import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings';
 
 export const SCAN_TIMEFRAME_CONFIG = {
   '1h': { interval: '1h', limit: 24, label: '1H', sparkLimit: 24 },
-  '4h': { interval: '4h', limit: 30, label: '4H', sparkLimit: 30 },
+  '4h': { interval: '4h', limit: 72, label: '4H', sparkLimit: 72 },
 };
 
 export const DEFAULT_THRESHOLDS = DEFAULT_RUNTIME_SETTINGS.thresholds;

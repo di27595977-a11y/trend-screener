@@ -513,7 +513,7 @@ export default function ChartDetail() {
       currentPrice: livePrice ?? candles.at(-1)?.close ?? scoreSource?.entryPrice,
       positionScore: effectiveMetrics.positionScore ?? scoreSource?.positionScore,
       score: scoreSource?.trendScore ?? (currentMetrics ? calculateTrendScore(currentMetrics) : null),
-      priceChange: effectiveMetrics.priceChange ?? scoreSource?.priceChangePct,
+      priceChangePercent: effectiveMetrics.priceChange ?? scoreSource?.priceChangePct,
       patterns: buildAdvisorPatterns(patterns),
       supportLevels: levels.supportLevels,
       resistanceLevels: levels.resistanceLevels,

@@ -1,7 +1,7 @@
 const TONES = {
-  long: 'border-emerald-400/30 bg-emerald-400/12 text-emerald-50',
-  short: 'border-rose-400/30 bg-rose-400/12 text-rose-50',
-  watch: 'border-slate-400/25 bg-slate-400/10 text-slate-200',
+  long: 'border-transparent bg-[#16a34a] text-white',
+  short: 'border-transparent bg-[#dc2626] text-white',
+  watch: 'border-transparent bg-[#374151] text-white',
 };
 
 const LABELS = {
@@ -19,10 +19,12 @@ const CONFIDENCE = {
 export default function TradeSignalBadge({ direction = 'watch', confidence = 'low' }) {
   return (
     <span
-      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${TONES[direction] || TONES.watch}`}
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${
+        TONES[direction] || TONES.watch
+      } ${confidence === 'high' ? 'shadow-[0_0_0_1px_rgba(255,255,255,0.4)]' : ''}`}
       title={`\u4fe1\u5fc3\u5ea6\uff1a${CONFIDENCE[confidence] || CONFIDENCE.low}`}
     >
-      {`${LABELS[direction] || LABELS.watch} / ${CONFIDENCE[confidence] || CONFIDENCE.low}`}
+      {LABELS[direction] || LABELS.watch}
     </span>
   );
 }
