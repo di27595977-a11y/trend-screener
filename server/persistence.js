@@ -123,6 +123,21 @@ function buildGroupStats(records, getKeys) {
     .sort((left, right) => right.samples - left.samples);
 }
 
+function harmonicFamilyKeys(record) {
+  const families = new Set();
+
+  (record.detectedPatterns || []).forEach((pattern) => {
+    if (!pattern.startsWith('harmonic:')) {
+      return;
+    }
+
+    const [, name, direction] = pattern.split(':');
+    families.add(`harmonic_family:${name}:${direction}`);
+  });
+
+  return Array.from(families);
+}
+
 export function createPersistenceLayer() {
   const supabase = createSupabaseClient();
   const memory = {
@@ -453,6 +468,16 @@ export function createPersistenceLayer() {
           winRate24h: bucket.winRate24h,
         }));
 
+      const harmonicBuckets = buildGroupStats(mergedRecords, (record) => harmonicFamilyKeys(record))
+        .map((bucket) => ({
+          pattern: bucket.key,
+          samples: bucket.samples,
+          avg24hReturn: bucket.avg24hReturn,
+          avg72hReturn: bucket.avg72hReturn,
+          winRate24h: bucket.winRate24h,
+        }))
+        .sort((left, right) => right.samples - left.samples);
+
       return {
         timeframe,
         days,
@@ -469,6 +494,7 @@ export function createPersistenceLayer() {
         },
         scoreBuckets,
         patternBuckets,
+        harmonicBuckets,
         recent: mergedRecords.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)).slice(0, 25),
       };
     },

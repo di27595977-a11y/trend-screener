@@ -18,6 +18,21 @@ function percentChange(entryPrice: number | null | undefined, exitPrice: number 
   return ((exitPrice - entryPrice) / entryPrice) * 100;
 }
 
+function harmonicFamilyKeys(item: { detectedPatterns: string[] }) {
+  const families = new Set<string>();
+
+  item.detectedPatterns.forEach((pattern) => {
+    if (!pattern.startsWith('harmonic:')) {
+      return;
+    }
+
+    const [, name, direction] = pattern.split(':');
+    families.add(`harmonic_family:${name}:${direction}`);
+  });
+
+  return Array.from(families);
+}
+
 export async function setAppState(admin: ReturnType<typeof createAdminClient>, key: string, value: Record<string, unknown>) {
   const { error } = await admin.from('app_state').upsert({
     key,
@@ -250,6 +265,7 @@ export async function buildBacktestReport(
   const totalsValid24h = merged.filter((item) => item.return24h != null);
   const scoreGroups = new Map<string, any[]>();
   const patternGroups = new Map<string, any[]>();
+  const harmonicGroups = new Map<string, any[]>();
 
   merged.forEach((item) => {
     const scoreKey = scoreBucket(item.trendScore);
@@ -260,6 +276,11 @@ export async function buildBacktestReport(
     patterns.forEach((pattern: string) => {
       if (!patternGroups.has(pattern)) patternGroups.set(pattern, []);
       patternGroups.get(pattern)!.push(item);
+    });
+
+    harmonicFamilyKeys(item).forEach((pattern) => {
+      if (!harmonicGroups.has(pattern)) harmonicGroups.set(pattern, []);
+      harmonicGroups.get(pattern)!.push(item);
     });
   });
 
@@ -298,6 +319,17 @@ export async function buildBacktestReport(
       }))
       .sort((left, right) => right.samples - left.samples)
       .slice(0, 12),
+    harmonicBuckets: Array.from(harmonicGroups.entries())
+      .map(([pattern, items]) => ({
+        pattern,
+        samples: items.length,
+        avg24hReturn: average(items.map((item) => item.return24h)),
+        avg72hReturn: average(items.map((item) => item.return72h)),
+        winRate24h: items.filter((item) => item.return24h != null).length
+          ? (items.filter((item) => (item.return24h ?? -999) > 0).length / items.filter((item) => item.return24h != null).length) * 100
+          : null,
+      }))
+      .sort((left, right) => right.samples - left.samples),
     recent: merged.sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()).slice(0, 25),
   };
 }

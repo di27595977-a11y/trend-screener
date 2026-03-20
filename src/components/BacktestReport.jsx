@@ -11,6 +11,7 @@ const COPY = {
   winRate24h: '24H \u52dd\u7387',
   scoreBuckets: '\u5206\u6578\u5340\u9593\u8868\u73fe',
   patternBuckets: '\u5f62\u614b\u52dd\u7387',
+  harmonicBuckets: '\u8ae7\u6ce2\u578b\u5225\u8868\u73fe',
   recent: '\u6700\u8fd1\u6a23\u672c\u8868\u73fe',
   bucket: '\u5340\u9593',
   pattern: '\u5f62\u614b',
@@ -53,7 +54,7 @@ function formatPatternName(pattern) {
     );
   }
 
-  if (pattern.startsWith('harmonic:')) {
+  if (pattern.startsWith('harmonic:') || pattern.startsWith('harmonic_family:')) {
     const [, name, direction] = pattern.split(':');
     const baseLabel =
       {
@@ -136,6 +137,7 @@ export default function BacktestReport() {
 
   const scoreBuckets = report?.scoreBuckets || [];
   const patternBuckets = report?.patternBuckets || [];
+  const harmonicBuckets = report?.harmonicBuckets || [];
   const recentRows = report?.recent || [];
 
   return (
@@ -255,6 +257,38 @@ export default function BacktestReport() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </section>
+
+          <section className="panel rounded-[28px] px-5 py-5">
+            <h3 className="text-lg font-semibold text-white">{COPY.harmonicBuckets}</h3>
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-full text-left text-sm text-slate-200">
+                <thead className="text-xs uppercase tracking-[0.24em] text-slate-400">
+                  <tr>
+                    <th className="pb-3 pr-4">{COPY.pattern}</th>
+                    <th className="pb-3 pr-4">{COPY.samples}</th>
+                    <th className="pb-3 pr-4">24H</th>
+                    <th className="pb-3 pr-4">72H</th>
+                    <th className="pb-3 pr-0">{'\u52dd\u7387'}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {harmonicBuckets.length ? (
+                    harmonicBuckets.map((bucket) => (
+                      <tr key={bucket.pattern} className="border-t border-white/8">
+                        <td className="py-3 pr-4 font-mono">{formatPatternName(bucket.pattern)}</td>
+                        <td className="py-3 pr-4">{bucket.samples}</td>
+                        <td className="py-3 pr-4">{formatPercent(bucket.avg24hReturn)}</td>
+                        <td className="py-3 pr-4">{formatPercent(bucket.avg72hReturn)}</td>
+                        <td className="py-3 pr-0">{formatPercent(bucket.winRate24h)}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <EmptyStateRow columns={5} />
+                  )}
+                </tbody>
+              </table>
             </div>
           </section>
 
