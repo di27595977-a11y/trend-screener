@@ -2,8 +2,6 @@
 
 Trend Screener is a React + Vite + Express app for scanning Binance USDT-M perpetual contracts, ranking clean uptrends, and overlaying auto-detected chart patterns on a 72-bar detail chart.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdi27595977-a11y%2Ftrend-screener)
-
 ## Stack
 
 - Frontend: React 19, React Router, Tailwind CSS v4
@@ -46,8 +44,9 @@ This split matters because Vercel is great for the frontend, but the scan and ba
 
 ## GitHub to Vercel
 
-- Direct import: [Open this repo in Vercel](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fdi27595977-a11y%2Ftrend-screener)
-- Official Vercel docs say Git-based deployments are created by importing the GitHub repository into Vercel, then each push triggers a new deployment automatically.
+- Use the Vercel dashboard and choose `Add New -> Project -> Import Git Repository`.
+- Select the existing GitHub repository `di27595977-a11y/trend-screener`.
+- Do not use the template clone flow for this repo, or Vercel will try to create a duplicate GitHub repository.
 
 ## GitHub Push
 
