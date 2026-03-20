@@ -24,6 +24,39 @@ async function requestJson(path, options = {}) {
   return response.json();
 }
 
+async function readInvokeErrorMessage(error) {
+  if (!error?.context || typeof error.context.clone !== 'function') {
+    return error?.message || 'Edge Function request failed';
+  }
+
+  try {
+    const response = error.context.clone();
+    const text = await response.text();
+
+    if (!text) {
+      return error.message || `Edge Function request failed with ${response.status}`;
+    }
+
+    try {
+      const payload = JSON.parse(text);
+
+      if (typeof payload?.error === 'string' && payload.error.trim()) {
+        return payload.error;
+      }
+
+      if (typeof payload?.message === 'string' && payload.message.trim()) {
+        return payload.message;
+      }
+    } catch {
+      // Fall back to the raw response body when the function returned plain text.
+    }
+
+    return text;
+  } catch {
+    return error?.message || 'Edge Function request failed';
+  }
+}
+
 async function invokeTrendApi(action, payload = {}) {
   if (supabase) {
     const { data, error } = await supabase.functions.invoke('trend-api', {
@@ -34,7 +67,7 @@ async function invokeTrendApi(action, payload = {}) {
     });
 
     if (error) {
-      throw error;
+      throw new Error(await readInvokeErrorMessage(error));
     }
 
     return data;
