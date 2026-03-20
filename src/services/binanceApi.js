@@ -139,6 +139,13 @@ export async function getSymbolCandles(symbol, { interval = '1h', limit = 72 } =
   return requestJson(`/chart/${symbol}?${params.toString()}`);
 }
 
+export async function getTradableSymbols() {
+  const data = await invokeTrendApi('list-symbols');
+  if (data) return data.symbols || [];
+  const response = await requestJson('/symbols');
+  return response.symbols || [];
+}
+
 export async function getBacktestReport({ timeframe = '1h', days = 30 } = {}) {
   const data = await invokeTrendApi('backtest-report', { timeframe, days });
   if (data) return data;

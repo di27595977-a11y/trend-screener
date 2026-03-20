@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import { BacktestJob } from './backtestJob.js';
 import { createPersistenceLayer } from './persistence.js';
-import { ScanJob, fetchCandles } from './scanJob.js';
+import { ScanJob, fetchCandles, fetchTradableSymbols } from './scanJob.js';
 
 dotenv.config();
 
@@ -92,6 +92,16 @@ app.get('/api/chart/:symbol', async (request, response, next) => {
       symbol: request.params.symbol.toUpperCase(),
       interval,
       candles,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/symbols', async (_request, response, next) => {
+  try {
+    response.json({
+      symbols: await fetchTradableSymbols(),
     });
   } catch (error) {
     next(error);

@@ -1,4 +1,4 @@
-import { getSymbolCandles, getSymbolOverview } from '../services/binanceApi';
+import { getSymbolCandles, getSymbolOverview, getTradableSymbols } from '../services/binanceApi';
 import { SCAN_TIMEFRAME_CONFIG, buildSparkline, evaluateTrend, passesTrendThresholds } from '../services/indicators';
 import { detectAllPatterns } from '../services/patternDetection';
 import { calculateTrendScore } from '../utils/scoring';
@@ -169,6 +169,75 @@ function normalizeSymbolInput(input) {
   return cleaned.endsWith('USDT') ? cleaned : `${cleaned}USDT`;
 }
 
+function normalizeSymbolCore(symbol) {
+  return String(symbol || '')
+    .toUpperCase()
+    .replace(/USDT$/, '');
+}
+
+function commonPrefixLength(left, right) {
+  const limit = Math.min(left.length, right.length);
+  let count = 0;
+
+  while (count < limit && left[count] === right[count]) {
+    count += 1;
+  }
+
+  return count;
+}
+
+function rankSuggestedSymbols(query, symbols, limit = 3) {
+  const needle = normalizeSymbolCore(query).replace(/[^A-Z0-9]/g, '');
+
+  if (!needle) {
+    return [];
+  }
+
+  return symbols
+    .map((symbol) => {
+      const base = normalizeSymbolCore(symbol);
+      const prefixLength = commonPrefixLength(base, needle);
+      let score = 0;
+
+      if (base === needle) score = 1000;
+      if (symbol === `${needle}USDT`) score = Math.max(score, 995);
+      if (base.startsWith(needle)) score = Math.max(score, 940 - (base.length - needle.length));
+      if (base.includes(needle)) score = Math.max(score, 860 - base.indexOf(needle) * 5);
+      if (needle.startsWith(base)) score = Math.max(score, 780 - (needle.length - base.length) * 5);
+      if (`${needle}T` === base || needle === `${base}T`) score = Math.max(score, 930);
+      score = Math.max(score, prefixLength * 40 - Math.abs(base.length - needle.length) * 3);
+
+      return { symbol, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.symbol.localeCompare(right.symbol))
+    .slice(0, limit)
+    .map((item) => item.symbol);
+}
+
+function isInvalidSymbolError(error) {
+  const message = error?.message || String(error);
+  return /binance request failed/i.test(message) || /invalid symbol/i.test(message);
+}
+
+async function enrichSymbolLookupError(symbol, error) {
+  if (!isInvalidSymbolError(error)) {
+    return normalizeSymbolError(symbol, error);
+  }
+
+  try {
+    const suggestions = rankSuggestedSymbols(symbol, await getTradableSymbols());
+
+    if (suggestions.length) {
+      return new Error(`${symbol} 目前不是 Binance USDT-M 永續合約代號，你是不是要找 ${suggestions.join('、')}？`);
+    }
+  } catch {
+    // Fall back to the base error when the symbol list cannot be loaded.
+  }
+
+  return normalizeSymbolError(symbol, error);
+}
+
 function getLatestSnapshotMeta(scannerStatus, timeframe) {
   return scannerStatus?.scanner?.cacheMeta?.[timeframe] || null;
 }
@@ -282,7 +351,7 @@ export async function analyzeSymbol(input, { settings, scannerStatus } = {}) {
       },
     };
   } catch (error) {
-    throw normalizeSymbolError(symbol, error);
+    throw await enrichSymbolLookupError(symbol, error);
   }
 }
 

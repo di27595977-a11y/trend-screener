@@ -1,5 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-import { fetchCandles } from '../_shared/binance.ts';
+import { fetchCandles, fetchTradableSymbols } from '../_shared/binance.ts';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import {
   buildBacktestReport,
@@ -124,6 +124,12 @@ Deno.serve(async (request) => {
         symbol: String(body.symbol).toUpperCase(),
         interval: body.interval || '1h',
         candles: await fetchCandles(String(body.symbol).toUpperCase(), body.interval || '1h', Number(body.limit || 72)),
+      });
+    }
+
+    if (action === 'list-symbols') {
+      return json({
+        symbols: await fetchTradableSymbols(),
       });
     }
 
