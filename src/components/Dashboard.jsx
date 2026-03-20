@@ -2,6 +2,7 @@ import { startTransition, useDeferredValue, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FilterPanel from './FilterPanel';
 import StrategySettingsPanel from './StrategySettingsPanel';
+import SymbolLookupPanel from './SymbolLookupPanel';
 import StatusBar from './StatusBar';
 import CoinTable from './CoinTable';
 import { loadDashboardSnapshot, triggerScan } from '../services/scanner';
@@ -346,6 +347,12 @@ export default function Dashboard() {
           wsConnected={wsConnected}
           onRefresh={handleRefresh}
           refreshing={refreshing}
+        />
+
+        <SymbolLookupPanel
+          settings={strategySettings}
+          status={status}
+          onOpenChart={(symbol) => navigate(`/chart/${symbol}`)}
         />
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
