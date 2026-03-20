@@ -163,6 +163,7 @@ export function scoreBucket(score: number) {
 }
 
 const HARMONIC_RATIO_TOLERANCE = 0.08;
+const DEFAULT_HARMONIC_MIN_CONFIDENCE = 0.7;
 const HARMONIC_SPECS = [
   { key: 'gartley', xab: [0.618, 0.618], abc: [0.382, 0.886], bcd: [1.13, 1.618], xad: [0.786, 0.786] },
   { key: 'bat', xab: [0.382, 0.5], abc: [0.382, 0.886], bcd: [1.618, 2.618], xad: [0.886, 0.886] },
@@ -417,7 +418,12 @@ function buildHarmonicCandidate(points: Array<SwingPoint & { type: 'high' | 'low
   return candidates.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
-function detectHarmonicPattern(swingHighs: SwingPoint[], swingLows: SwingPoint[], candles: Candle[]) {
+function detectHarmonicPattern(
+  swingHighs: SwingPoint[],
+  swingLows: SwingPoint[],
+  candles: Candle[],
+  minConfidence = DEFAULT_HARMONIC_MIN_CONFIDENCE,
+) {
   const mergedSwings = mergeSwingSequence(swingHighs, swingLows);
   const candidates: Array<{ key: string; direction: 'bullish' | 'bearish'; confidence: number; dIndex: number }> = [];
 
@@ -429,15 +435,20 @@ function detectHarmonicPattern(swingHighs: SwingPoint[], swingLows: SwingPoint[]
     }
   }
 
-  return (
+  const bestCandidate =
     candidates.sort((left, right) => {
       if (right.confidence !== left.confidence) {
         return right.confidence - left.confidence;
       }
 
       return right.dIndex - left.dIndex;
-    })[0] ?? null
-  );
+    })[0] ?? null;
+
+  if (!bestCandidate || bestCandidate.confidence < minConfidence) {
+    return null;
+  }
+
+  return bestCandidate;
 }
 
 function detectWBottom(swingHighs: SwingPoint[], swingLows: SwingPoint[], candles: Candle[], tolerance = 0.02) {

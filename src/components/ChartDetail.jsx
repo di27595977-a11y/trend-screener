@@ -21,6 +21,10 @@ const COPY = {
   detectedPatterns: '\u5075\u6e2c\u5230\u7684\u5f62\u614b',
   patternEmpty: '\u7d14\u8da8\u52e2',
   toggles: '\u986f\u793a\u958b\u95dc',
+  harmonicRatios: '\u8ae7\u6ce2\u6bd4\u7387',
+  confidence: '\u53ef\u4fe1\u5ea6',
+  actualRatio: '\u5be6\u969b\u6bd4\u7387',
+  targetRange: '\u7406\u60f3\u7bc4\u570d',
   insights: '\u5feb\u901f\u89c0\u5bdf',
   supportResistance: '\u652f\u6490 / \u58d3\u529b',
   triangle: '\u4e09\u89d2\u6536\u6582',
@@ -83,6 +87,28 @@ function formatPercent(value, digits = 2) {
   return `${value.toFixed(digits)}%`;
 }
 
+function formatRatio(value) {
+  if (value == null || Number.isNaN(value)) {
+    return '--';
+  }
+
+  return value.toFixed(3);
+}
+
+function formatRatioTarget(range) {
+  if (!range?.length) {
+    return '--';
+  }
+
+  const [min, max] = range;
+
+  if (Math.abs(max - min) < 0.0005) {
+    return formatRatio(min);
+  }
+
+  return `${formatRatio(min)} - ${formatRatio(max)}`;
+}
+
 function formatLevelType(type) {
   return type === 'support' ? '\u652f\u6490' : '\u58d3\u529b';
 }
@@ -95,6 +121,10 @@ function formatTriangleType(type) {
       symmetric: '\u5c0d\u7a31\u4e09\u89d2',
     }[type] || '\u4e09\u89d2\u6536\u6582'
   );
+}
+
+function formatHarmonicDirection(direction) {
+  return direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
 }
 
 function fallbackOverview(candles) {
@@ -134,13 +164,28 @@ function buildHarmonicSummary(patterns) {
     return COPY.noHarmonic;
   }
 
-  const directionLabel = patterns.harmonic.direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
+  const directionLabel = formatHarmonicDirection(patterns.harmonic.direction);
   const targetText = patterns.harmonic.targetPrice ? `\u7b2c\u4e00\u76ee\u6a19 ${formatPrice(patterns.harmonic.targetPrice)}` : '\u5148\u89c0\u5bdf PRZ \u5340\u57df\u53cd\u61c9';
   const confirmationText = patterns.harmonic.reactionConfirmed
     ? '\u76ee\u524d\u5df2\u7d93\u958b\u59cb\u51fa\u73fe\u53cd\u61c9\u3002'
     : '\u76ee\u524d\u9084\u5728\u5b8c\u6210\u5340\u9644\u8fd1\uff0c\u53ef\u4ee5\u7b49\u5f85\u53cd\u8f49\u78ba\u8a8d\u3002';
 
-  return `${patterns.harmonic.label} ${directionLabel}\uff0cPRZ \u5728 ${formatPrice(patterns.harmonic.przPrice)}\uff0c${targetText}\u3002${confirmationText}`;
+  return `${patterns.harmonic.label} ${directionLabel}\uff0cPRZ \u5728 ${formatPrice(patterns.harmonic.przPrice)}\uff0c${COPY.confidence} ${Math.round(
+    patterns.harmonic.confidence * 100,
+  )}%\uff0c${targetText}\u3002${confirmationText}`;
+}
+
+function buildHarmonicRatioRows(pattern) {
+  if (!pattern) {
+    return [];
+  }
+
+  return [
+    ['XAB', pattern.ratios?.xab, pattern.ratioTargets?.xab],
+    ['ABC', pattern.ratios?.abc, pattern.ratioTargets?.abc],
+    ['BCD', pattern.ratios?.bcd, pattern.ratioTargets?.bcd],
+    ['XAD', pattern.ratios?.xad, pattern.ratioTargets?.xad],
+  ];
 }
 
 function buildReversalSummary(patterns) {
@@ -475,6 +520,45 @@ export default function ChartDetail() {
               ))}
             </div>
           </section>
+
+          {patterns?.harmonic && (
+            <section className="panel rounded-[28px] px-5 py-5">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.harmonicRatios}</p>
+                <span className="rounded-full border border-sky-400/25 bg-sky-400/10 px-3 py-1 font-mono text-xs text-sky-100">
+                  {`${COPY.confidence} ${Math.round(patterns.harmonic.confidence * 100)}%`}
+                </span>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                <p className="font-medium text-white">{`${patterns.harmonic.label} ${formatHarmonicDirection(patterns.harmonic.direction)}`}</p>
+                <p className="mt-1 text-sm text-slate-300">
+                  {`PRZ ${formatPrice(patterns.harmonic.przPrice)}${
+                    patterns.harmonic.targetPrice ? ` \u00b7 T1 ${formatPrice(patterns.harmonic.targetPrice)}` : ''
+                  } \u00b7 ${patterns.harmonic.reactionConfirmed ? '\u5df2\u958b\u59cb\u53cd\u61c9' : '\u7b49\u5f85\u53cd\u61c9'}`}
+                </p>
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {buildHarmonicRatioRows(patterns.harmonic).map(([label, actual, target]) => (
+                  <div
+                    key={label}
+                    className="grid grid-cols-[64px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm"
+                  >
+                    <span className="font-mono text-white">{label}</span>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.actualRatio}</p>
+                      <p className="mt-1 font-mono text-slate-100">{formatRatio(actual)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.targetRange}</p>
+                      <p className="mt-1 font-mono text-slate-100">{formatRatioTarget(target)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="panel rounded-[28px] px-5 py-5">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.insights}</p>

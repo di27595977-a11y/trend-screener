@@ -1,4 +1,5 @@
 const HARMONIC_RATIO_TOLERANCE = 0.08;
+const DEFAULT_HARMONIC_MIN_CONFIDENCE = 0.7;
 
 const HARMONIC_SPECS = [
   {
@@ -232,6 +233,12 @@ function buildHarmonicCandidate(points, candles) {
       c,
       d,
       ratios,
+      ratioTargets: {
+        xab: spec.xab,
+        abc: spec.abc,
+        bcd: spec.bcd,
+        xad: spec.xad,
+      },
       confidence: fitScore + (reactionConfirmed ? 0.08 : 0),
       reactionConfirmed,
       przPrice: d.price,
@@ -418,7 +425,7 @@ export function detectMTop(swingHighs, swingLows, candles, tolerance = 0.02) {
   return patterns.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
-export function detectHarmonicPattern(swingHighs, swingLows, candles) {
+export function detectHarmonicPattern(swingHighs, swingLows, candles, minConfidence = DEFAULT_HARMONIC_MIN_CONFIDENCE) {
   const mergedSwings = mergeSwingSequence(swingHighs, swingLows);
   const candidates = [];
 
@@ -430,27 +437,33 @@ export function detectHarmonicPattern(swingHighs, swingLows, candles) {
     }
   }
 
-  return (
+  const bestCandidate =
     candidates.sort((left, right) => {
       if (right.confidence !== left.confidence) {
         return right.confidence - left.confidence;
       }
 
       return (right.d?.index ?? 0) - (left.d?.index ?? 0);
-    })[0] ?? null
-  );
+    })[0] ?? null;
+
+  if (!bestCandidate || bestCandidate.confidence < minConfidence) {
+    return null;
+  }
+
+  return bestCandidate;
 }
 
 export function detectAllPatterns(candles, options = {}) {
   const lookback = options.lookback ?? 3;
   const tolerance = options.tolerance ?? 0.005;
   const reversalTolerance = options.reversalTolerance ?? 0.02;
+  const minHarmonicConfidence = options.minHarmonicConfidence ?? DEFAULT_HARMONIC_MIN_CONFIDENCE;
   const { swingHighs, swingLows } = findSwingPoints(candles, lookback);
 
   return {
     supportResistance: detectSupportResistance(swingHighs, swingLows, tolerance),
     triangle: detectTriangle(swingHighs, swingLows, candles.length),
-    harmonic: detectHarmonicPattern(swingHighs, swingLows, candles),
+    harmonic: detectHarmonicPattern(swingHighs, swingLows, candles, minHarmonicConfidence),
     wBottom: detectWBottom(swingHighs, swingLows, candles, reversalTolerance),
     mTop: detectMTop(swingHighs, swingLows, candles, reversalTolerance),
     swingPoints: { swingHighs, swingLows },
