@@ -139,6 +139,31 @@ function harmonicFamilyKeys(record) {
   return Array.from(families);
 }
 
+const BACKTEST_RESULT_BATCH_SIZE = 100;
+
+async function fetchBacktestRowsByResultIds(supabase, ids) {
+  const uniqueIds = Array.from(new Set((ids || []).filter(Boolean)));
+
+  if (!uniqueIds.length) {
+    return [];
+  }
+
+  const rows = [];
+
+  for (let index = 0; index < uniqueIds.length; index += BACKTEST_RESULT_BATCH_SIZE) {
+    const batchIds = uniqueIds.slice(index, index + BACKTEST_RESULT_BATCH_SIZE);
+    const { data, error } = await supabase.from('backtest_tracking').select('*').in('scan_result_id', batchIds);
+
+    if (error) {
+      throw error;
+    }
+
+    rows.push(...(data || []));
+  }
+
+  return rows;
+}
+
 function cloneSettings(settings) {
   return JSON.parse(JSON.stringify(settings));
 }
@@ -496,16 +521,8 @@ export function createPersistenceLayer() {
         const ids = Array.from(resultMap.keys());
 
         if (ids.length) {
-          const { data: backtestRows, error: backtestError } = await supabase
-            .from('backtest_tracking')
-            .select('*')
-            .in('scan_result_id', ids);
-
-          if (backtestError) {
-            throw backtestError;
-          }
-
-          mergedRecords = mergeBacktestRecords(backtestRows || [], resultMap);
+          const backtestRows = await fetchBacktestRowsByResultIds(supabase, ids);
+          mergedRecords = mergeBacktestRecords(backtestRows, resultMap);
         }
       }
 

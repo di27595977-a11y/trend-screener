@@ -31,6 +31,22 @@ function filterResults(results: any[], minScore: number, patterns: string[]) {
   });
 }
 
+function serializeError(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
+    return (error as { message: string }).message;
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return 'Unexpected error';
+  }
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -127,6 +143,6 @@ Deno.serve(async (request) => {
 
     return json({ error: `Unknown action: ${action}` }, { status: 400 });
   } catch (error) {
-    return json({ error: error instanceof Error ? error.message : 'Unexpected error' }, { status: 500 });
+    return json({ error: serializeError(error) }, { status: 500 });
   }
 });

@@ -8,6 +8,8 @@ export function createAdminClient() {
   });
 }
 
+const BACKTEST_RESULT_BATCH_SIZE = 100;
+
 function average(values: Array<number | null | undefined>) {
   const valid = values.filter((value): value is number => typeof value === 'number' && !Number.isNaN(value));
   if (!valid.length) return null;
@@ -32,6 +34,29 @@ function harmonicFamilyKeys(item: { detectedPatterns: string[] }) {
   });
 
   return Array.from(families);
+}
+
+async function fetchBacktestRowsByResultIds(admin: ReturnType<typeof createAdminClient>, ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+
+  if (!uniqueIds.length) {
+    return [];
+  }
+
+  const rows: any[] = [];
+
+  for (let index = 0; index < uniqueIds.length; index += BACKTEST_RESULT_BATCH_SIZE) {
+    const batchIds = uniqueIds.slice(index, index + BACKTEST_RESULT_BATCH_SIZE);
+    const { data, error } = await admin.from('backtest_tracking').select('*').in('scan_result_id', batchIds);
+
+    if (error) {
+      throw error;
+    }
+
+    rows.push(...(data || []));
+  }
+
+  return rows;
 }
 
 export async function setAppState(admin: ReturnType<typeof createAdminClient>, key: string, value: Record<string, unknown>) {
@@ -265,12 +290,7 @@ export async function buildBacktestReport(
   if (resultError) throw resultError;
 
   const resultMap = new Map((resultRows || []).map((row: any) => [row.id, row]));
-  const { data: backtestRows, error: backtestError } = await admin
-    .from('backtest_tracking')
-    .select('*')
-    .in('scan_result_id', Array.from(resultMap.keys()));
-
-  if (backtestError) throw backtestError;
+  const backtestRows = await fetchBacktestRowsByResultIds(admin, Array.from(resultMap.keys()));
 
   const merged = (backtestRows || [])
     .map((row: any) => {
