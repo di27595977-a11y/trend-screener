@@ -58,3 +58,30 @@ alter table scan_snapshots enable row level security;
 alter table scan_results enable row level security;
 alter table backtest_tracking enable row level security;
 alter table app_state enable row level security;
+
+-- ── Alpha Matrix 即時訊號 ──────────────────────────────────────────────────
+create table if not exists alpha_signals (
+  id          uuid default gen_random_uuid() primary key,
+  created_at  timestamptz not null default now(),
+  symbol      text not null,
+  alert_type  text not null,          -- volume_spike / price_move / volatility_burst / bb_squeeze
+  direction   text not null,          -- bull / bear
+  quality     integer not null,
+  trend       text,
+  position_pct numeric,
+  price       numeric,
+  message     text                    -- 完整 TG 推送文字
+);
+
+create index if not exists idx_alpha_signals_created_at on alpha_signals(created_at desc);
+create index if not exists idx_alpha_signals_symbol on alpha_signals(symbol, created_at desc);
+
+alter table alpha_signals enable row level security;
+
+-- anon 可讀（前端直接查詢）
+create policy "anon read alpha_signals"
+  on alpha_signals for select to anon using (true);
+
+-- service_role 可寫（Alpha Matrix 後端推送）
+create policy "service insert alpha_signals"
+  on alpha_signals for insert to service_role with check (true);

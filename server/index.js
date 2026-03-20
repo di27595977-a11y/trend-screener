@@ -109,6 +109,16 @@ app.get('/api/backtest/report', async (request, response, next) => {
   }
 });
 
+app.get('/api/alpha-signals', async (request, response, next) => {
+  try {
+    const limit = Math.min(Number.parseInt(request.query.limit || '100', 10), 500);
+    const signals = await persistence.getAlphaSignals(limit);
+    response.json(signals);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error, _request, response, _next) => {
   const message = error?.message || 'Unexpected server error';
   response.status(500).send(message);

@@ -578,5 +578,18 @@ export function createPersistenceLayer() {
         recent: mergedRecords.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt)).slice(0, 25),
       };
     },
+
+    async getAlphaSignals(limit = 100) {
+      if (!supabase) {
+        return [];
+      }
+      const { data, error } = await supabase
+        .from('alpha_signals')
+        .select('id, created_at, symbol, alert_type, direction, quality, trend, position_pct, price, message')
+        .order('created_at', { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      return data || [];
+    },
   };
 }

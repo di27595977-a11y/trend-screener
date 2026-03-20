@@ -2,14 +2,16 @@ import { NavLink, Route, Routes } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import ChartDetail from './components/ChartDetail';
 import BacktestReport from './components/BacktestReport';
+import AlphaSignals from './components/AlphaSignals';
 
 const COPY = {
-  eyebrow: '\u8da8\u52e2\u7be9\u9078\u5668',
-  title: '\u5f9e\u5e7e\u767e\u500b\u5e63\u88e1\u5feb\u901f\u6311\u51fa\u503c\u5f97\u6253\u958b\u5716\u770b\u7684\u5019\u9078',
+  eyebrow: '趨勢篩選器',
+  title: '從幾百個幣裡快速挑出值得打開圖看的候選',
   description:
-    '\u7a0b\u5f0f\u8ca0\u8cac\u6383\u63cf\u3001\u8a55\u5206\u8207\u756b\u7dda\uff0c\u4eba\u773c\u8ca0\u8cac\u6700\u7d42\u5224\u65b7\uff0c\u5e6b\u4f60\u5728 Binance USDT-M \u5408\u7d04\u5e02\u5834\u88e1\u66f4\u5feb\u627e\u5230\u5716\u5f62\u4e7e\u6de8\u3001\u7a69\u5b9a\u4e0a\u5347\u7684\u6a19\u7684\u3002',
-  dashboard: '\u5100\u8868\u677f',
-  backtest: '\u56de\u6e2c\u5831\u544a',
+    '程式負責掃描、評分與畫線，人眼負責最終判斷，幫你在 Binance USDT-M 合約市場裡更快找到圖形乾淨、穩定上升的標的。',
+  dashboard: '儀表板',
+  backtest: '回測報告',
+  alpha: '即時訊號',
 };
 
 function AppNavLink({ to, children, end = false }) {
@@ -45,11 +47,12 @@ function AppShell({ children }) {
             <p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">{COPY.description}</p>
           </div>
 
-          <nav className="grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
+          <nav className="grid grid-cols-3 gap-3 sm:flex sm:flex-wrap">
             <AppNavLink end to="/">
               {COPY.dashboard}
             </AppNavLink>
             <AppNavLink to="/backtest">{COPY.backtest}</AppNavLink>
+            <AppNavLink to="/alpha">{COPY.alpha}</AppNavLink>
           </nav>
         </header>
 
@@ -66,6 +69,7 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/chart/:symbol" element={<ChartDetail />} />
         <Route path="/backtest" element={<BacktestReport />} />
+        <Route path="/alpha" element={<AlphaSignals />} />
       </Routes>
     </AppShell>
   );
