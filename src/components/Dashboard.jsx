@@ -17,6 +17,14 @@ const DEFAULT_FILTERS = {
   },
 };
 
+const COPY = {
+  candidates: '\u5019\u9078\u5e63\u6578',
+  averageScore: '\u5e73\u5747\u5206\u6578',
+  topSetup: '\u6700\u4f73\u5019\u9078',
+  loading: '\u6b63\u5728\u6383\u63cf Binance USDT-M \u5408\u7d04\u5e02\u5834...',
+  noBest: '\u76ee\u524d\u9084\u6c92\u6709\u7b26\u5408\u689d\u4ef6\u7684\u5e63\u7a2e',
+};
+
 function toPatternFilterList(patterns) {
   const entries = [];
 
@@ -42,6 +50,19 @@ function averageScore(rows) {
 
   const total = rows.reduce((sum, row) => sum + row.trendScore, 0);
   return Math.round((total / rows.length) * 10) / 10;
+}
+
+function formatCandidatesDescription(totalSymbols) {
+  return `\u5f9e ${totalSymbols || '--'} \u500b\u5168\u5e02\u5834\u5e63\u7a2e\u88e1\u5feb\u901f\u7e2e\u5c0f\u5230\u5c11\u6578\u5019\u9078\u3002`;
+}
+
+function formatTopDescription(bestRow) {
+  if (!bestRow) {
+    return COPY.noBest;
+  }
+
+  const patternCount = bestRow.detectedPatterns?.length || 0;
+  return `\u5206\u6578 ${bestRow.trendScore}\uff0c\u76ee\u524d\u5075\u6e2c\u5230 ${patternCount} \u7a2e\u5f62\u614b\u7dda\u7d22\u3002`;
 }
 
 export default function Dashboard() {
@@ -181,21 +202,21 @@ export default function Dashboard() {
 
         <div className="mb-6 grid gap-4 md:grid-cols-3">
           <div className="panel-soft rounded-[24px] px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Candidates</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.candidates}</p>
             <p className="mt-3 font-mono text-3xl text-white">{visibleRows.length}</p>
-            <p className="mt-2 text-sm text-slate-300">Filtered from {meta.totalSymbols || '--'} active perpetuals</p>
+            <p className="mt-2 text-sm text-slate-300">{formatCandidatesDescription(meta.totalSymbols)}</p>
           </div>
           <div className="panel-soft rounded-[24px] px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Average score</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.averageScore}</p>
             <p className="mt-3 font-mono text-3xl text-white">{averageScore(visibleRows) || '--'}</p>
-            <p className="mt-2 text-sm text-slate-300">Using the current score floor and pattern filters</p>
+            <p className="mt-2 text-sm text-slate-300">
+              {'\u5feb\u901f\u78ba\u8a8d\u76ee\u524d\u6574\u9ad4\u76e4\u9762\u662f\u5426\u9084\u4fdd\u6301\u8d8a\u52e2\u3002'}
+            </p>
           </div>
           <div className="panel-soft rounded-[24px] px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Top setup</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.topSetup}</p>
             <p className="mt-3 font-mono text-3xl text-white">{bestRow?.symbol || '--'}</p>
-            <p className="mt-2 text-sm text-slate-300">
-              {bestRow ? `Score ${bestRow.trendScore} with ${bestRow.detectedPatterns?.length || 0} pattern tags` : 'Waiting for scan output'}
-            </p>
+            <p className="mt-2 text-sm text-slate-300">{formatTopDescription(bestRow)}</p>
           </div>
         </div>
 
@@ -206,9 +227,7 @@ export default function Dashboard() {
         )}
 
         {loading ? (
-          <div className="panel flex min-h-[320px] items-center justify-center rounded-[28px] text-slate-300">
-            Scanning Binance futures universe...
-          </div>
+          <div className="panel flex min-h-[320px] items-center justify-center rounded-[28px] text-slate-300">{COPY.loading}</div>
         ) : (
           <CoinTable
             rows={visibleRows}

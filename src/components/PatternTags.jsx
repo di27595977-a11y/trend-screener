@@ -12,30 +12,34 @@ function parsePatternName(rawPattern) {
     const type = rawPattern.split(':')[1];
     const label =
       {
-        ascending: '▲ 上升三角',
-        descending: '▽ 下降三角',
-        symmetric: '◇ 對稱三角',
-      }[type] || '三角收斂';
+        ascending: '\u25b2 \u4e0a\u5347\u4e09\u89d2',
+        descending: '\u25bd \u4e0b\u964d\u4e09\u89d2',
+        symmetric: '\u25c7 \u5c0d\u7a31\u4e09\u89d2',
+      }[type] || '\u4e09\u89d2\u6536\u6582';
 
     return { key: rawPattern, label, tone: 'triangle' };
   }
 
   if (rawPattern === 'w_bottom') {
-    return { key: rawPattern, label: 'W底', tone: 'w_bottom' };
+    return { key: rawPattern, label: 'W \u5e95', tone: 'w_bottom' };
   }
 
   if (rawPattern === 'm_top') {
-    return { key: rawPattern, label: 'M頂', tone: 'm_top' };
+    return { key: rawPattern, label: 'M \u9802', tone: 'm_top' };
   }
 
   if (rawPattern.startsWith('support:')) {
     const touches = rawPattern.split(':')[1];
-    return { key: rawPattern, label: `支撐 x${touches}`, tone: 'support' };
+    return { key: rawPattern, label: `\u652f\u6490 \u00d7${touches}`, tone: 'support' };
   }
 
   if (rawPattern.startsWith('resistance:')) {
     const touches = rawPattern.split(':')[1];
-    return { key: rawPattern, label: `壓力 x${touches}`, tone: 'resistance' };
+    return { key: rawPattern, label: `\u58d3\u529b \u00d7${touches}`, tone: 'resistance' };
+  }
+
+  if (rawPattern === 'trend_only') {
+    return { key: rawPattern, label: '\u7d14\u8da8\u52e2', tone: 'neutral' };
   }
 
   return { key: rawPattern, label: rawPattern, tone: 'neutral' };
@@ -63,7 +67,7 @@ function fromPatternObject(patterns) {
   return values;
 }
 
-export default function PatternTags({ patterns = [], emptyLabel = '純趨勢' }) {
+export default function PatternTags({ patterns = [], emptyLabel = '\u7d14\u8da8\u52e2' }) {
   const rawPatterns = Array.isArray(patterns) ? patterns : fromPatternObject(patterns);
   const parsedPatterns = rawPatterns.map(parsePatternName);
 

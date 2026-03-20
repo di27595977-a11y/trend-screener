@@ -10,6 +10,34 @@ import { detectAllPatterns } from '../services/patternDetection';
 import { evaluateTrend } from '../services/indicators';
 import { calculateTrendScore } from '../utils/scoring';
 
+const COPY = {
+  back: '\u56de\u5230\u5100\u8868\u677f',
+  scoringMode: '\u8a55\u5206\u6a21\u5f0f',
+  currentPrice: '\u73fe\u50f9',
+  change: '\u6f32\u5e45',
+  openBinance: '\u5728 Binance \u958b\u555f',
+  openTradingView: '\u5728 TradingView \u958b\u555f',
+  loading: '\u6b63\u5728\u8f09\u5165\u904e\u53bb 72 \u6839 1H K \u7dda...',
+  detectedPatterns: '\u5075\u6e2c\u5230\u7684\u5f62\u614b',
+  patternEmpty: '\u7d14\u8da8\u52e2',
+  toggles: '\u986f\u793a\u958b\u95dc',
+  insights: '\u5feb\u901f\u89c0\u5bdf',
+  supportResistance: '\u652f\u6490 / \u58d3\u529b',
+  triangle: '\u4e09\u89d2\u6536\u6582',
+  reversals: 'W / M \u53cd\u8f49',
+  swingPoints: '\u8f49\u6298\u9ede',
+  noLevels: '\u76ee\u524d\u6c92\u6709\u627e\u5230\u91cd\u8907\u78b0\u89f8\u7684\u95dc\u9375\u50f9\u4f4d\u3002',
+  noTriangle: '\u76ee\u524d\u6c92\u6709\u660e\u986f\u7684\u6536\u6582\u4e09\u89d2\uff0c\u53ef\u4ee5\u5148\u89c0\u5bdf\u9ad8\u4f4e\u9ede\u662f\u5426\u958b\u59cb\u6536\u655b\u3002',
+  noReversal: '\u76ee\u524d\u6c92\u6709\u5b8c\u6574\u7684 W \u5e95\u6216 M \u9802\u7d50\u69cb\u3002',
+};
+
+const TOGGLE_OPTIONS = [
+  ['supportResistance', COPY.supportResistance],
+  ['triangle', COPY.triangle],
+  ['reversals', COPY.reversals],
+  ['swingPoints', COPY.swingPoints],
+];
+
 function toCandleSeriesData(candles) {
   return candles.map((candle) => ({
     time: candle.time,
@@ -34,14 +62,14 @@ function formatPrice(value) {
   }
 
   if (value >= 1000) {
-    return value.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    return value.toLocaleString('zh-TW', { maximumFractionDigits: 2 });
   }
 
   if (value >= 1) {
-    return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    return value.toLocaleString('zh-TW', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
   }
 
-  return value.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+  return value.toLocaleString('zh-TW', { minimumFractionDigits: 4, maximumFractionDigits: 6 });
 }
 
 function formatPercent(value, digits = 2) {
@@ -50,6 +78,20 @@ function formatPercent(value, digits = 2) {
   }
 
   return `${value.toFixed(digits)}%`;
+}
+
+function formatLevelType(type) {
+  return type === 'support' ? '\u652f\u6490' : '\u58d3\u529b';
+}
+
+function formatTriangleType(type) {
+  return (
+    {
+      ascending: '\u4e0a\u5347\u4e09\u89d2',
+      descending: '\u4e0b\u964d\u4e09\u89d2',
+      symmetric: '\u5c0d\u7a31\u4e09\u89d2',
+    }[type] || '\u4e09\u89d2\u6536\u6582'
+  );
 }
 
 function fallbackOverview(candles) {
@@ -63,6 +105,45 @@ function fallbackOverview(candles) {
     entryPrice: recent.at(-1)?.close ?? null,
     timeframe: '1h',
   };
+}
+
+function buildLevelSummary(patterns) {
+  if (!patterns?.supportResistance?.length) {
+    return COPY.noLevels;
+  }
+
+  return patterns.supportResistance
+    .slice(0, 2)
+    .map((level) => `${formatLevelType(level.type)} ${formatPrice(level.price)} \u00d7${level.touches}`)
+    .join(' / ');
+}
+
+function buildTriangleSummary(patterns) {
+  if (!patterns?.triangle) {
+    return COPY.noTriangle;
+  }
+
+  return `\u6700\u8fd1\u7d50\u69cb\u504f\u5411 ${formatTriangleType(patterns.triangle.type)}\uff0c\u53ef\u4ee5\u89c0\u5bdf\u6536\u6582\u672b\u7aef\u662f\u5426\u51fa\u73fe\u653e\u91cf\u7a81\u7834\u3002`;
+}
+
+function buildReversalSummary(patterns) {
+  if (patterns?.wBottom) {
+    return `W \u5e95\u9818\u7dda\u5728 ${formatPrice(patterns.wBottom.necklinePrice)}\uff0c${
+      patterns.wBottom.isBreakout
+        ? '\u76ee\u524d\u5df2\u7d93\u7a81\u7834\uff0c\u53ef\u4ee5\u89c0\u5bdf\u76ee\u6a19\u50f9\u662f\u5426\u6709\u8ddf\u4e0a\u3002'
+        : '\u76ee\u524d\u9084\u5728\u9818\u7dda\u4e0b\u65b9\uff0c\u53ef\u4ee5\u7b49\u5f85\u78ba\u8a8d\u6536\u76e4\u7ad9\u4e0a\u3002'
+    }`;
+  }
+
+  if (patterns?.mTop) {
+    return `M \u9802\u9818\u7dda\u5728 ${formatPrice(patterns.mTop.necklinePrice)}\uff0c${
+      patterns.mTop.isBreakdown
+        ? '\u76ee\u524d\u5df2\u7d93\u8dcc\u7834\uff0c\u53ef\u4ee5\u89c0\u5bdf\u5f31\u52e2\u662f\u5426\u5ef6\u7e8c\u3002'
+        : '\u76ee\u524d\u9084\u5728\u9818\u7dda\u4e0a\u65b9\uff0c\u5148\u7b49\u5f85\u8dcc\u7834\u78ba\u8a8d\u3002'
+    }`;
+  }
+
+  return COPY.noReversal;
 }
 
 export default function ChartDetail() {
@@ -295,20 +376,20 @@ export default function ChartDetail() {
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <Link to="/" className="inline-flex items-center gap-2 text-sm text-slate-300 transition hover:text-white">
-              <span aria-hidden="true">←</span>
-              Back to dashboard
+              <span aria-hidden="true">{'\u2190'}</span>
+              {COPY.back}
             </Link>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <h2 className="font-mono text-3xl font-semibold text-white">{symbol}</h2>
               <ScoreBadge score={scoreSource?.trendScore || 0} />
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-200">
-                {scoreSource?.timeframe?.toUpperCase() || '1H'} scan basis
+                {`${scoreSource?.timeframe?.toUpperCase() || '1H'} ${COPY.scoringMode}`}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-4 font-mono text-sm text-slate-300">
-              <span>Live {formatPrice(livePrice)}</span>
-              <span>R2 {scoreSource?.rSquared?.toFixed?.(2) || '--'}</span>
-              <span>Change {formatPercent(scoreSource?.priceChangePct)}</span>
+              <span>{`${COPY.currentPrice} ${formatPrice(livePrice)}`}</span>
+              <span>{`R\u00b2 ${scoreSource?.rSquared?.toFixed?.(2) || '--'}`}</span>
+              <span>{`${COPY.change} ${formatPercent(scoreSource?.priceChangePct)}`}</span>
             </div>
           </div>
 
@@ -319,7 +400,7 @@ export default function ChartDetail() {
               rel="noreferrer"
               className="rounded-full border border-emerald-400/35 bg-emerald-400/12 px-4 py-2 text-sm font-medium text-emerald-50 transition hover:border-emerald-300/50"
             >
-              Open on Binance
+              {COPY.openBinance}
             </a>
             <a
               href={buildTradingViewUrl(symbol)}
@@ -327,7 +408,7 @@ export default function ChartDetail() {
               rel="noreferrer"
               className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-white/20"
             >
-              Open on TradingView
+              {COPY.openTradingView}
             </a>
           </div>
         </div>
@@ -340,26 +421,21 @@ export default function ChartDetail() {
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="panel rounded-[28px] px-5 py-5">
           <div ref={containerRef} className="h-[520px] w-full overflow-hidden rounded-[24px] border border-white/10 bg-[#09101d]" />
-          {loading && <p className="mt-4 text-sm text-slate-300">Loading 72 x 1H candles...</p>}
+          {loading && <p className="mt-4 text-sm text-slate-300">{COPY.loading}</p>}
         </div>
 
         <div className="space-y-6">
           <section className="panel rounded-[28px] px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Detected patterns</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.detectedPatterns}</p>
             <div className="mt-4">
-              <PatternTags patterns={patterns} emptyLabel="No major structure yet" />
+              <PatternTags patterns={patterns} emptyLabel={COPY.patternEmpty} />
             </div>
           </section>
 
           <section className="panel rounded-[28px] px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Overlay toggles</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.toggles}</p>
             <div className="mt-4 space-y-2">
-              {[
-                ['supportResistance', 'Support / resistance'],
-                ['triangle', 'Triangle'],
-                ['reversals', 'W / M reversal'],
-                ['swingPoints', 'Swing points'],
-              ].map(([key, label]) => (
+              {TOGGLE_OPTIONS.map(([key, label]) => (
                 <label
                   key={key}
                   className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200"
@@ -382,34 +458,19 @@ export default function ChartDetail() {
           </section>
 
           <section className="panel rounded-[28px] px-5 py-5">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Structure notes</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.insights}</p>
             <div className="mt-4 space-y-3 text-sm text-slate-300">
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                <p className="font-medium text-white">Support / resistance</p>
-                <p className="mt-1">
-                  {patterns?.supportResistance?.length
-                    ? patterns.supportResistance
-                        .slice(0, 2)
-                        .map((level) => `${level.type} ${formatPrice(level.price)} x${level.touches}`)
-                        .join(' / ')
-                    : 'No repeated level clusters in the last 72 bars.'}
-                </p>
+                <p className="font-medium text-white">{COPY.supportResistance}</p>
+                <p className="mt-1">{buildLevelSummary(patterns)}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                <p className="font-medium text-white">Triangle</p>
-                <p className="mt-1">
-                  {patterns?.triangle ? `Detected ${patterns.triangle.type} triangle from recent swing compression.` : 'No active triangle compression.'}
-                </p>
+                <p className="font-medium text-white">{COPY.triangle}</p>
+                <p className="mt-1">{buildTriangleSummary(patterns)}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                <p className="font-medium text-white">W / M setup</p>
-                <p className="mt-1">
-                  {patterns?.wBottom
-                    ? `W bottom neckline ${formatPrice(patterns.wBottom.necklinePrice)}${patterns.wBottom.isBreakout ? ' already broken.' : ' still under neckline.'}`
-                    : patterns?.mTop
-                      ? `M top neckline ${formatPrice(patterns.mTop.necklinePrice)}${patterns.mTop.isBreakdown ? ' already broken.' : ' still holding.'}`
-                      : 'No clear W or M reversal structure in the current window.'}
-                </p>
+                <p className="font-medium text-white">{COPY.reversals}</p>
+                <p className="mt-1">{buildReversalSummary(patterns)}</p>
               </div>
             </div>
           </section>

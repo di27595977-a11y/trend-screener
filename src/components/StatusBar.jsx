@@ -11,6 +11,18 @@ function formatTime(value) {
   });
 }
 
+function formatStorageLabel(value) {
+  if (value === 'supabase') {
+    return 'Supabase';
+  }
+
+  if (value === 'memory') {
+    return '\u8a18\u61b6\u9ad4';
+  }
+
+  return value || '--';
+}
+
 function ProgressPill({ label, value, tone = 'slate' }) {
   const toneClasses = {
     emerald: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100',
@@ -31,12 +43,21 @@ export default function StatusBar({ status, timeframe, wsConnected, onRefresh, r
   const scanner = status?.scanner || {};
   const backtest = status?.backtest || {};
   const progress = scanner.progress || { completed: 0, total: 0, percent: 0 };
+  const storageLabel = formatStorageLabel(status?.persistence);
+  const scanState = scanner.isScanning
+    ? `\u6383\u63cf\u4e2d ${scanner.activeTimeframe || timeframe}`
+    : `\u76e3\u770b\u4e2d ${timeframe}`;
+  const progressValue = progress.total
+    ? `${progress.completed}/${progress.total} (${progress.percent}%)`
+    : '\u5f85\u547d\u4e2d';
 
   return (
     <section className="panel data-grid mb-6 rounded-[28px] px-5 py-5">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.35em] text-emerald-300/75">Scanner State</p>
+          <p className="font-mono text-xs uppercase tracking-[0.35em] text-emerald-300/75">
+            {'\u6383\u63cf\u72c0\u614b'}
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <span
               className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-sm ${
@@ -46,13 +67,11 @@ export default function StatusBar({ status, timeframe, wsConnected, onRefresh, r
               }`}
             >
               <span className={`h-2 w-2 rounded-full ${wsConnected ? 'bg-emerald-300' : 'bg-rose-300'}`} />
-              {wsConnected ? 'WS connected' : 'WS reconnecting'}
+              {wsConnected ? '\u5df2\u9023\u7dda' : '\u91cd\u9023\u4e2d'}
             </span>
+            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-200">{scanState}</span>
             <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-200">
-              {scanner.isScanning ? `Scanning ${scanner.activeTimeframe || timeframe}` : `Watching ${timeframe}`}
-            </span>
-            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm text-slate-200">
-              Storage: {status?.persistence || 'memory'}
+              {`\u8cc7\u6599\u5132\u5b58\uff1a${storageLabel}`}
             </span>
           </div>
         </div>
@@ -63,20 +82,16 @@ export default function StatusBar({ status, timeframe, wsConnected, onRefresh, r
           disabled={refreshing || scanner.isScanning}
           className="inline-flex items-center justify-center rounded-full border border-emerald-400/35 bg-emerald-400/12 px-4 py-2 text-sm font-medium text-emerald-50 transition hover:border-emerald-300/55 hover:bg-emerald-400/18 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {refreshing || scanner.isScanning ? 'Scanning...' : 'Scan now'}
+          {refreshing || scanner.isScanning ? '\u6383\u63cf\u4e2d...' : '\u7acb\u5373\u6383\u63cf'}
         </button>
       </div>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <ProgressPill label="Last scan" value={formatTime(scanner.lastScanAt)} tone="emerald" />
-        <ProgressPill label="Next scan" value={formatTime(scanner.nextScanAt)} />
-        <ProgressPill
-          label="Progress"
-          value={progress.total ? `${progress.completed}/${progress.total} (${progress.percent}%)` : 'Idle'}
-          tone={scanner.isScanning ? 'amber' : 'slate'}
-        />
-        <ProgressPill label="Backtest run" value={formatTime(backtest.lastRunAt)} />
-        <ProgressPill label="Backtest next" value={formatTime(backtest.nextRunAt)} tone="amber" />
+        <ProgressPill label={'\u4e0a\u6b21\u6383\u63cf'} value={formatTime(scanner.lastScanAt)} tone="emerald" />
+        <ProgressPill label={'\u4e0b\u6b21\u6383\u63cf'} value={formatTime(scanner.nextScanAt)} />
+        <ProgressPill label={'\u9032\u5ea6'} value={progressValue} tone={scanner.isScanning ? 'amber' : 'slate'} />
+        <ProgressPill label={'\u4e0a\u6b21\u56de\u6e2c'} value={formatTime(backtest.lastRunAt)} />
+        <ProgressPill label={'\u4e0b\u6b21\u56de\u6e2c'} value={formatTime(backtest.nextRunAt)} tone="amber" />
       </div>
     </section>
   );

@@ -1,3 +1,9 @@
+const TRIANGLE_LABELS = {
+  ascending: '\u25b2 \u4e0a\u5347\u4e09\u89d2',
+  descending: '\u25bd \u4e0b\u964d\u4e09\u89d2',
+  symmetric: '\u25c7 \u5c0d\u7a31\u4e09\u89d2',
+};
+
 class PatternRenderer {
   constructor(chart, candleSeries) {
     this.chart = chart;
@@ -82,6 +88,27 @@ class PatternRenderer {
     this.ctx.fillText(text, x, y);
   }
 
+  drawGuideLine(price, color, text, yOffset = -6, dash = [8, 4]) {
+    const y = this.series.priceToCoordinate(price);
+
+    if (y == null || !this.ctx || !this.canvas) {
+      return;
+    }
+
+    const ratio = window.devicePixelRatio || 1;
+    const width = this.canvas.width / ratio;
+
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = 1.5;
+    this.ctx.setLineDash(dash);
+    this.ctx.beginPath();
+    this.ctx.moveTo(0, y);
+    this.ctx.lineTo(width, y);
+    this.ctx.stroke();
+    this.ctx.setLineDash([]);
+    this.drawText(text, 12, y + yOffset, color.replace('88', '').replace('cc', ''));
+  }
+
   render() {
     if (!this.ctx || !this.canvas) {
       return;
@@ -137,6 +164,7 @@ class PatternRenderer {
       }
 
       const color = level.type === 'resistance' ? '#fb7185' : '#34d399';
+      const label = `${level.type === 'resistance' ? '\u58d3\u529b' : '\u652f\u6490'} ${level.price.toPrecision(6)} \u00d7${level.touches}`;
       ctx.strokeStyle = `${color}cc`;
       ctx.lineWidth = Math.min(level.touches, 3);
       ctx.setLineDash([7, 4]);
@@ -145,7 +173,7 @@ class PatternRenderer {
       ctx.lineTo(width, y);
       ctx.stroke();
       ctx.setLineDash([]);
-      this.drawText(`${level.type === 'resistance' ? 'R' : 'S'} ${level.price.toPrecision(6)} x${level.touches}`, 12, y - 6, color);
+      this.drawText(label, 12, y - 6, color);
     });
 
     if (triangle) {
@@ -170,12 +198,7 @@ class PatternRenderer {
         ctx.stroke();
       });
 
-      const label =
-        {
-          ascending: '▲ 上升三角',
-          descending: '▽ 下降三角',
-          symmetric: '◇ 對稱三角',
-        }[triangle.type] || '三角收斂';
+      const label = TRIANGLE_LABELS[triangle.type] || '\u4e09\u89d2\u6536\u6582';
       const anchor = this.tp(triangle.upperPoints[0].time, triangle.upperPoints[0].price);
 
       if (anchor.x != null && anchor.y != null) {
@@ -205,17 +228,10 @@ class PatternRenderer {
         });
       }
 
-      const necklineY = this.series.priceToCoordinate(wBottom.necklinePrice);
-      if (necklineY != null) {
-        ctx.strokeStyle = '#34d39988';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([8, 4]);
-        ctx.beginPath();
-        ctx.moveTo(0, necklineY);
-        ctx.lineTo(width, necklineY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        this.drawText(`W ${wBottom.necklinePrice.toPrecision(6)}`, 12, necklineY - 6, '#6ee7b7');
+      this.drawGuideLine(wBottom.necklinePrice, '#34d39988', `W \u5e95\u9818\u7dda ${wBottom.necklinePrice.toPrecision(6)}`);
+
+      if (wBottom.isBreakout && wBottom.targetPrice) {
+        this.drawGuideLine(wBottom.targetPrice, '#86efac88', `\u76ee\u6a19 ${wBottom.targetPrice.toPrecision(6)}`);
       }
     }
 
@@ -241,17 +257,10 @@ class PatternRenderer {
         });
       }
 
-      const necklineY = this.series.priceToCoordinate(mTop.necklinePrice);
-      if (necklineY != null) {
-        ctx.strokeStyle = '#fb718588';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([8, 4]);
-        ctx.beginPath();
-        ctx.moveTo(0, necklineY);
-        ctx.lineTo(width, necklineY);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        this.drawText(`M ${mTop.necklinePrice.toPrecision(6)}`, 12, necklineY + 14, '#fda4af');
+      this.drawGuideLine(mTop.necklinePrice, '#fb718588', `M \u9802\u9818\u7dda ${mTop.necklinePrice.toPrecision(6)}`, 14);
+
+      if (mTop.isBreakdown && mTop.targetPrice) {
+        this.drawGuideLine(mTop.targetPrice, '#fca5a588', `\u76ee\u6a19 ${mTop.targetPrice.toPrecision(6)}`, 14);
       }
     }
   }

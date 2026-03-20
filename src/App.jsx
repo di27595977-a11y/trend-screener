@@ -3,6 +3,15 @@ import Dashboard from './components/Dashboard';
 import ChartDetail from './components/ChartDetail';
 import BacktestReport from './components/BacktestReport';
 
+const COPY = {
+  eyebrow: '\u8da8\u52e2\u7be9\u9078\u5668',
+  title: '\u5f9e\u5e7e\u767e\u500b\u5e63\u88e1\u5feb\u901f\u6311\u51fa\u503c\u5f97\u6253\u958b\u5716\u770b\u7684\u5019\u9078',
+  description:
+    '\u7a0b\u5f0f\u8ca0\u8cac\u6383\u63cf\u3001\u8a55\u5206\u8207\u756b\u7dda\uff0c\u4eba\u773c\u8ca0\u8cac\u6700\u7d42\u5224\u65b7\uff0c\u5e6b\u4f60\u5728 Binance USDT-M \u5408\u7d04\u5e02\u5834\u88e1\u66f4\u5feb\u627e\u5230\u5716\u5f62\u4e7e\u6de8\u3001\u7a69\u5b9a\u4e0a\u5347\u7684\u6a19\u7684\u3002',
+  dashboard: '\u5100\u8868\u677f',
+  backtest: '\u56de\u6e2c\u5831\u544a',
+};
+
 function AppNavLink({ to, children, end = false }) {
   return (
     <NavLink
@@ -31,20 +40,16 @@ function AppShell({ children }) {
       <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col px-4 pb-8 pt-5 sm:px-6 lg:px-8">
         <header className="mb-6 flex flex-col gap-4 rounded-[28px] border border-white/10 bg-slate-950/55 px-5 py-5 shadow-[0_32px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.35em] text-emerald-300/75">Trend Screener</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-              Scan fast. Draw structure. Let your eyes decide.
-            </h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">
-              Binance USDT-M perpetual trend ranking with live prices, pattern overlays, and backtest feedback.
-            </p>
+            <p className="font-mono text-xs uppercase tracking-[0.35em] text-emerald-300/75">{COPY.eyebrow}</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">{COPY.title}</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">{COPY.description}</p>
           </div>
 
           <nav className="flex flex-wrap gap-3">
             <AppNavLink end to="/">
-              Dashboard
+              {COPY.dashboard}
             </AppNavLink>
-            <AppNavLink to="/backtest">Backtest</AppNavLink>
+            <AppNavLink to="/backtest">{COPY.backtest}</AppNavLink>
           </nav>
         </header>
 
