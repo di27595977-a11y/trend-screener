@@ -1,7 +1,15 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
 import { fetchCandles } from '../_shared/binance.ts';
 import { corsHeaders, json } from '../_shared/cors.ts';
-import { buildBacktestReport, createAdminClient, getAppState, getLatestScanResults, getLatestSymbolOverview } from '../_shared/db.ts';
+import {
+  buildBacktestReport,
+  createAdminClient,
+  getAppState,
+  getLatestScanResults,
+  getLatestSymbolOverview,
+  getRuntimeSettings,
+  updateRuntimeSettings,
+} from '../_shared/db.ts';
 import { runBacktest, runScan } from '../_shared/jobs.ts';
 
 function filterResults(results: any[], minScore: number, patterns: string[]) {
@@ -54,9 +62,18 @@ Deno.serve(async (request) => {
       });
     }
 
+    if (action === 'get-settings') {
+      return json(await getRuntimeSettings(admin));
+    }
+
+    if (action === 'update-settings') {
+      return json(await updateRuntimeSettings(admin, body.settings || {}));
+    }
+
     if (action === 'scan-results') {
       const timeframe = body.timeframe || '1h';
-      const minScore = Number.parseInt(body.minScore || '55', 10);
+      const settings = await getRuntimeSettings(admin);
+      const minScore = body.minScore != null ? Number.parseInt(body.minScore, 10) : settings.scan.minScoreDefault;
       const patterns = Array.isArray(body.patterns) ? body.patterns : [];
       const force = Boolean(body.force);
       const snapshot = force ? await runScan(admin, timeframe) : await getLatestScanResults(admin, timeframe);
@@ -95,7 +112,13 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'backtest-report') {
-      return json(await buildBacktestReport(admin, { timeframe: body.timeframe || '1h', days: Number(body.days || 30) }));
+      const settings = await getRuntimeSettings(admin);
+      return json(
+        await buildBacktestReport(admin, {
+          timeframe: body.timeframe || '1h',
+          days: body.days != null ? Number(body.days) : settings.backtest.reportDaysDefault,
+        }),
+      );
     }
 
     if (action === 'run-backtest') {

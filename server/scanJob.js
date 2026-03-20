@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { pathToFileURL } from 'node:url';
+import { DEFAULT_RUNTIME_SETTINGS } from '../src/config/runtimeSettings.js';
 import { SCAN_TIMEFRAME_CONFIG, buildSparkline, evaluateTrend, passesTrendThresholds } from '../src/services/indicators.js';
 import { detectAllPatterns, summarizePatterns } from '../src/services/patternDetection.js';
 import { calculateTrendScore } from '../src/utils/scoring.js';
@@ -11,7 +12,6 @@ const API_BASE = process.env.BINANCE_API_BASE || 'https://fapi.binance.com';
 const REQUESTS_PER_SECOND = Math.max(Number.parseInt(process.env.BINANCE_REQUESTS_PER_SECOND || '4', 10), 1);
 const SYMBOL_LIMIT = process.env.BINANCE_SYMBOL_LIMIT ? Number.parseInt(process.env.BINANCE_SYMBOL_LIMIT, 10) : null;
 const SCAN_INTERVAL_MS = Math.max(Number.parseInt(process.env.SCAN_INTERVAL_MINUTES || '5', 10), 1) * 60 * 1000;
-const PATTERN_DETECTION_LIMIT = 50;
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -226,6 +226,7 @@ export class ScanJob {
     const config = SCAN_TIMEFRAME_CONFIG[timeframe];
     const symbols = await this.ensureSymbols();
     const startedAt = Date.now();
+    const runtimeSettings = (await this.persistence?.getRuntimeSettings?.()) || DEFAULT_RUNTIME_SETTINGS;
 
     this.status.isScanning = true;
     this.status.activeTimeframe = timeframe;
@@ -243,11 +244,14 @@ export class ScanJob {
 
         const metrics = evaluateTrend(candles);
 
-        if (!passesTrendThresholds(metrics)) {
+        if (!passesTrendThresholds(metrics, runtimeSettings.thresholds)) {
           return null;
         }
 
-        return toScanResult(symbol, timeframe, candles, metrics);
+        return {
+          ...toScanResult(symbol, timeframe, candles, metrics),
+          trendScore: calculateTrendScore(metrics, runtimeSettings),
+        };
       },
       (completed, total) => {
         this.status.progress = {
@@ -260,7 +264,7 @@ export class ScanJob {
 
     baseResults.sort((left, right) => right.trendScore - left.trendScore);
 
-    const topForPatterns = baseResults.slice(0, PATTERN_DETECTION_LIMIT);
+    const topForPatterns = baseResults.slice(0, runtimeSettings.scan.patternDetectionLimit);
     const patternSummaries = new Map();
 
     await runBatches(topForPatterns, Math.max(1, Math.floor(this.requestsPerSecond / 2)), async (result) => {
@@ -301,6 +305,7 @@ export class ScanJob {
         interval: config.interval,
         limit: config.limit,
         requestsPerSecond: this.requestsPerSecond,
+        runtimeSettings,
       },
       results,
       scannedAt,
@@ -309,9 +314,10 @@ export class ScanJob {
     return { results, meta };
   }
 
-  async getResults({ timeframe = '1h', minScore = 55, patterns = [], force = false } = {}) {
+  async getResults({ timeframe = '1h', minScore, patterns = [], force = false } = {}) {
     const scan = await this.scanTimeframe(timeframe, { force });
-    const filteredResults = filterResults(scan.results, minScore, patterns);
+    const runtimeSettings = (await this.persistence?.getRuntimeSettings?.()) || DEFAULT_RUNTIME_SETTINGS;
+    const filteredResults = filterResults(scan.results, minScore ?? runtimeSettings.scan.minScoreDefault, patterns);
 
     return {
       results: filteredResults,

@@ -1,9 +1,12 @@
 import { startTransition, useDeferredValue, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import FilterPanel from './FilterPanel';
+import StrategySettingsPanel from './StrategySettingsPanel';
 import StatusBar from './StatusBar';
 import CoinTable from './CoinTable';
 import { loadDashboardSnapshot, triggerScan } from '../services/scanner';
+import { getRuntimeSettings, updateRuntimeSettings } from '../services/binanceApi';
+import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings';
 import wsManager from '../services/wsManager';
 
 const DEFAULT_FILTERS = {
@@ -73,12 +76,15 @@ function formatTopDescription(bestRow) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [strategySettings, setStrategySettings] = useState(DEFAULT_RUNTIME_SETTINGS);
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState(null);
   const [meta, setMeta] = useState({});
   const [priceMap, setPriceMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsSavedAt, setSettingsSavedAt] = useState('');
   const [error, setError] = useState('');
   const [wsConnected, setWsConnected] = useState(false);
   const deferredSearch = useDeferredValue(filters.search.trim().toUpperCase());
@@ -101,6 +107,35 @@ export default function Dashboard() {
       unsubscribePrices();
       unsubscribeConnection();
       wsManager.disconnectMiniTicker();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings() {
+      try {
+        const nextSettings = await getRuntimeSettings();
+
+        if (cancelled) {
+          return;
+        }
+
+        setStrategySettings(nextSettings);
+        setFilters((current) =>
+          current.minScore === DEFAULT_FILTERS.minScore ? { ...current, minScore: nextSettings.scan.minScoreDefault } : current,
+        );
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError.message);
+        }
+      }
+    }
+
+    loadSettings();
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -187,14 +222,67 @@ export default function Dashboard() {
     }
   }
 
+  async function handleSaveSettings() {
+    setSavingSettings(true);
+
+    try {
+      const nextSettings = await updateRuntimeSettings(strategySettings);
+      setStrategySettings(nextSettings);
+      setFilters((current) => ({
+        ...current,
+        minScore: nextSettings.scan.minScoreDefault,
+      }));
+      setSettingsSavedAt(new Date().toISOString());
+      await triggerScan(filters.timeframe);
+      const snapshot = await loadDashboardSnapshot({
+        timeframe: filters.timeframe,
+        minScore: nextSettings.scan.minScoreDefault,
+        patterns: toPatternFilterList(filters.patterns),
+      });
+
+      startTransition(() => {
+        setRows(snapshot.rows);
+        setStatus(snapshot.status);
+        setMeta(snapshot.meta);
+        setError('');
+      });
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSavingSettings(false);
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <FilterPanel
-        filters={filters}
-        onChange={(nextValues) => {
-          setFilters((current) => ({ ...current, ...nextValues }));
-        }}
-      />
+      <div className="space-y-6">
+        <FilterPanel
+          filters={filters}
+          onChange={(nextValues) => {
+            setFilters((current) => ({ ...current, ...nextValues }));
+          }}
+        />
+
+        <StrategySettingsPanel
+          settings={strategySettings}
+          saving={savingSettings}
+          savedAt={settingsSavedAt}
+          onFieldChange={(section, key, value) =>
+            setStrategySettings((current) => ({
+              ...current,
+              [section]: {
+                ...current[section],
+                [key]: value,
+              },
+            }))
+          }
+          onReset={(nextSettings) => {
+            setStrategySettings(nextSettings);
+          }}
+          onSave={handleSaveSettings}
+        />
+      </div>
 
       <div>
         <StatusBar

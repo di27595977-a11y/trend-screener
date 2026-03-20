@@ -1,17 +1,11 @@
+import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings';
+
 export const SCAN_TIMEFRAME_CONFIG = {
   '1h': { interval: '1h', limit: 24, label: '1H', sparkLimit: 24 },
   '4h': { interval: '4h', limit: 30, label: '4H', sparkLimit: 30 },
 };
 
-export const DEFAULT_THRESHOLDS = {
-  minRSquared: 0.6,
-  maxPullbackRatio: 0.35,
-  minVolumeRatio: 1.1,
-  minPriceChange: 3,
-  maxPriceChange: 50,
-  preferredPositionMin: 0.4,
-  preferredPositionMax: 0.7,
-};
+export const DEFAULT_THRESHOLDS = DEFAULT_RUNTIME_SETTINGS.thresholds;
 
 export function linearRegression(prices) {
   const n = prices.length;

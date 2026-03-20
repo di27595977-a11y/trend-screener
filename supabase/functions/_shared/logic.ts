@@ -1,3 +1,5 @@
+import { DEFAULT_RUNTIME_SETTINGS } from './settings.ts';
+
 export type Candle = {
   time: number;
   open: number;
@@ -125,14 +127,15 @@ export function evaluateTrend(candles: Candle[]): TrendMetrics {
   };
 }
 
-export function passesTrendThresholds(metrics: TrendMetrics) {
+export function passesTrendThresholds(metrics: TrendMetrics, thresholds = DEFAULT_RUNTIME_SETTINGS.thresholds) {
+
   return (
-    metrics.rSquared >= 0.6 &&
+    metrics.rSquared >= thresholds.minRSquared &&
     metrics.slope > 0 &&
-    metrics.pullbackRatio <= 0.35 &&
-    metrics.volumeRatio >= 1.1 &&
-    metrics.priceChange >= 3 &&
-    metrics.priceChange <= 50
+    metrics.pullbackRatio <= thresholds.maxPullbackRatio &&
+    metrics.volumeRatio >= thresholds.minVolumeRatio &&
+    metrics.priceChange >= thresholds.minPriceChange &&
+    metrics.priceChange <= thresholds.maxPriceChange
   );
 }
 
@@ -140,15 +143,17 @@ export function buildSparkline(candles: Candle[], limit = 24) {
   return candles.slice(-limit).map((candle) => candle.close);
 }
 
-export function calculateTrendScore(metrics: TrendMetrics) {
+export function calculateTrendScore(metrics: TrendMetrics, settings = DEFAULT_RUNTIME_SETTINGS) {
+  const thresholds = settings.thresholds || DEFAULT_RUNTIME_SETTINGS.thresholds;
+  const scoring = settings.scoring || DEFAULT_RUNTIME_SETTINGS.scoring;
   const rScore = Math.min(Math.max(metrics.rSquared, 0), 1);
   const pullbackScore = Math.max(1 - metrics.pullbackRatio / 0.5, 0);
   const volumeScore = Math.min(Math.max(metrics.volumeRatio - 1, 0), 1);
-  const changeScore = metrics.priceChange >= 3 && metrics.priceChange <= 50 ? 1 : 0.3;
+  const changeScore = metrics.priceChange >= thresholds.minPriceChange && metrics.priceChange <= thresholds.maxPriceChange ? 1 : 0.3;
   const positionValue =
-    metrics.positionScore >= 0.4 && metrics.positionScore <= 0.7
+    metrics.positionScore >= scoring.preferredPositionMin && metrics.positionScore <= scoring.preferredPositionMax
       ? 1
-      : metrics.positionScore >= 0.25 && metrics.positionScore <= 0.85
+      : metrics.positionScore >= scoring.secondaryPositionMin && metrics.positionScore <= scoring.secondaryPositionMax
         ? 0.6
         : 0.3;
 

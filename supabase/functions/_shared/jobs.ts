@@ -8,15 +8,13 @@ import {
   passesTrendThresholds,
   summarizePatterns,
 } from './logic.ts';
-import { listPendingBacktests, recordScan, setAppState, updateBacktestEntry } from './db.ts';
+import { getRuntimeSettings, listPendingBacktests, recordScan, setAppState, updateBacktestEntry } from './db.ts';
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const REQUESTS_PER_SECOND = Math.max(Number.parseInt(Deno.env.get('BINANCE_REQUESTS_PER_SECOND') || '4', 10), 1);
-const PATTERN_DETECTION_LIMIT = 50;
-const BACKTEST_LOOKUP_CANDLE_LIMIT = 100;
 
 async function runBatches<T, R>(
   items: T[],
@@ -77,6 +75,7 @@ export async function runScan(admin: any, timeframe: string) {
 
   const symbols = await fetchTradableSymbols();
   const startedAt = Date.now();
+  const runtimeSettings = await getRuntimeSettings(admin);
 
   await setAppState(admin, 'scanner', {
     isScanning: true,
@@ -92,12 +91,12 @@ export async function runScan(admin: any, timeframe: string) {
       if (candles.length < config.limit) return null;
 
       const metrics = evaluateTrend(candles);
-      if (!passesTrendThresholds(metrics)) return null;
+      if (!passesTrendThresholds(metrics, runtimeSettings.thresholds)) return null;
 
       return {
         symbol,
         timeframe,
-        trendScore: calculateTrendScore(metrics),
+        trendScore: calculateTrendScore(metrics, runtimeSettings),
         rSquared: metrics.rSquared,
         slope: metrics.slope,
         slopePctPerBar: metrics.slopePctPerBar,
@@ -121,7 +120,7 @@ export async function runScan(admin: any, timeframe: string) {
   );
 
   baseResults.sort((left, right) => right.trendScore - left.trendScore);
-  const topForPatterns = baseResults.slice(0, PATTERN_DETECTION_LIMIT);
+  const topForPatterns = baseResults.slice(0, runtimeSettings.scan.patternDetectionLimit);
   const patternMap = new Map<string, string[]>();
 
   await runBatches(topForPatterns, Math.max(1, Math.floor(REQUESTS_PER_SECOND / 2)), async (result) => {
@@ -148,7 +147,7 @@ export async function runScan(admin: any, timeframe: string) {
     timeframe,
     totalSymbols: symbols.length,
     filteredCount: results.length,
-    params: { interval: config.interval, limit: config.limit, requestsPerSecond: REQUESTS_PER_SECOND },
+    params: { interval: config.interval, limit: config.limit, requestsPerSecond: REQUESTS_PER_SECOND, runtimeSettings },
     scannedAt,
     results,
   });
@@ -168,13 +167,14 @@ export async function runScan(admin: any, timeframe: string) {
 
 export async function runBacktest(admin: any) {
   const pending = await listPendingBacktests(admin, 60);
+  const runtimeSettings = await getRuntimeSettings(admin);
   await setAppState(admin, 'backtest', { isRunning: true, lastProcessed: 0 });
 
   let processed = 0;
   for (const entry of pending) {
     const createdAtMs = new Date(entry.created_at).getTime();
     const endTime = Math.min(createdAtMs + 72 * 60 * 60 * 1000, Date.now());
-    const candles = await fetchCandles(entry.symbol, '1h', BACKTEST_LOOKUP_CANDLE_LIMIT, { startTime: createdAtMs, endTime });
+    const candles = await fetchCandles(entry.symbol, '1h', runtimeSettings.backtest.lookupCandleLimit, { startTime: createdAtMs, endTime });
     if (!candles.length) continue;
 
     const rangeStats = calculateRangeStats(candles, Number(entry.entry_price));

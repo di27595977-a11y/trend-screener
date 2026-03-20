@@ -1,4 +1,5 @@
 import { createSupabaseClient } from '../src/services/supabaseClient.js';
+import { DEFAULT_RUNTIME_SETTINGS, normalizeRuntimeSettings } from '../src/config/runtimeSettings.js';
 import { scoreBucket } from '../src/utils/scoring.js';
 
 function average(values) {
@@ -138,12 +139,19 @@ function harmonicFamilyKeys(record) {
   return Array.from(families);
 }
 
+function cloneSettings(settings) {
+  return JSON.parse(JSON.stringify(settings));
+}
+
 export function createPersistenceLayer() {
   const supabase = createSupabaseClient();
   const memory = {
     snapshots: [],
     results: [],
     backtests: [],
+    appState: {
+      strategy_settings: cloneSettings(DEFAULT_RUNTIME_SETTINGS),
+    },
   };
   const mode = supabase ? 'supabase' : 'memory';
 
@@ -402,6 +410,61 @@ export function createPersistenceLayer() {
       }
 
       return null;
+    },
+
+    async getRuntimeSettings() {
+      if (!supabase) {
+        return normalizeRuntimeSettings(memory.appState.strategy_settings || {});
+      }
+
+      const { data, error } = await supabase.from('app_state').select('value').eq('key', 'strategy_settings').maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return normalizeRuntimeSettings(data?.value || {});
+    },
+
+    async updateRuntimeSettings(settings) {
+      const currentSettings = await this.getRuntimeSettings();
+      const nextSettings = normalizeRuntimeSettings({
+        ...currentSettings,
+        ...(settings || {}),
+        thresholds: {
+          ...currentSettings.thresholds,
+          ...(settings?.thresholds || {}),
+        },
+        scoring: {
+          ...currentSettings.scoring,
+          ...(settings?.scoring || {}),
+        },
+        scan: {
+          ...currentSettings.scan,
+          ...(settings?.scan || {}),
+        },
+        backtest: {
+          ...currentSettings.backtest,
+          ...(settings?.backtest || {}),
+        },
+      });
+
+      if (!supabase) {
+        memory.appState.strategy_settings = cloneSettings(nextSettings);
+        return nextSettings;
+      }
+
+      const { error } = await supabase.from('app_state').upsert({
+        key: 'strategy_settings',
+        value: nextSettings,
+        updated_at: new Date().toISOString(),
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      return nextSettings;
     },
 
     async buildBacktestReport({ timeframe = '1h', days = 30 }) {

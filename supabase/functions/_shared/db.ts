@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { scoreBucket } from './logic.ts';
+import { DEFAULT_RUNTIME_SETTINGS, normalizeRuntimeSettings } from './settings.ts';
 
 export function createAdminClient() {
   return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
@@ -47,6 +48,37 @@ export async function getAppState(admin: ReturnType<typeof createAdminClient>, k
   const { data, error } = await admin.from('app_state').select('*').eq('key', key).maybeSingle();
   if (error) throw error;
   return data?.value || null;
+}
+
+export async function getRuntimeSettings(admin: ReturnType<typeof createAdminClient>) {
+  const value = await getAppState(admin, 'strategy_settings');
+  return normalizeRuntimeSettings(value || DEFAULT_RUNTIME_SETTINGS);
+}
+
+export async function updateRuntimeSettings(admin: ReturnType<typeof createAdminClient>, settings: Record<string, unknown>) {
+  const currentSettings = await getRuntimeSettings(admin);
+  const nextSettings = normalizeRuntimeSettings({
+    ...currentSettings,
+    ...(settings || DEFAULT_RUNTIME_SETTINGS),
+    thresholds: {
+      ...currentSettings.thresholds,
+      ...((settings as any)?.thresholds || {}),
+    },
+    scoring: {
+      ...currentSettings.scoring,
+      ...((settings as any)?.scoring || {}),
+    },
+    scan: {
+      ...currentSettings.scan,
+      ...((settings as any)?.scan || {}),
+    },
+    backtest: {
+      ...currentSettings.backtest,
+      ...((settings as any)?.backtest || {}),
+    },
+  });
+  await setAppState(admin, 'strategy_settings', nextSettings);
+  return nextSettings;
 }
 
 export async function recordScan(

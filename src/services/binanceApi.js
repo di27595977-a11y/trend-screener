@@ -49,6 +49,22 @@ export async function getScannerStatus() {
   return requestJson('/status');
 }
 
+export async function getRuntimeSettings() {
+  const data = await invokeTrendApi('get-settings');
+  if (data) return data;
+  return requestJson('/settings');
+}
+
+export async function updateRuntimeSettings(settings) {
+  const data = await invokeTrendApi('update-settings', { settings });
+  if (data) return data;
+
+  return requestJson('/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}
+
 export async function getScanResults({ timeframe = '1h', minScore = 55, patterns = [], force = false } = {}) {
   const data = await invokeTrendApi('scan-results', { timeframe, minScore, patterns, force });
   if (data) return data;

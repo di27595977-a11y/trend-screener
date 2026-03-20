@@ -24,6 +24,22 @@ app.get('/api/status', (_request, response) => {
   });
 });
 
+app.get('/api/settings', async (_request, response, next) => {
+  try {
+    response.json(await persistence.getRuntimeSettings());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/settings', async (request, response, next) => {
+  try {
+    response.json(await persistence.updateRuntimeSettings(request.body || {}));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get('/api/scan', async (request, response, next) => {
   try {
     const patterns = Array.isArray(request.query.pattern)
@@ -32,7 +48,7 @@ app.get('/api/scan', async (request, response, next) => {
         ? [request.query.pattern]
         : [];
     const timeframe = request.query.timeframe || '1h';
-    const minScore = Number.parseInt(request.query.minScore || '55', 10);
+    const minScore = request.query.minScore != null ? Number.parseInt(request.query.minScore, 10) : undefined;
     const force = request.query.force === '1';
     const result = await scanJob.getResults({
       timeframe,
@@ -85,7 +101,7 @@ app.get('/api/chart/:symbol', async (request, response, next) => {
 app.get('/api/backtest/report', async (request, response, next) => {
   try {
     const timeframe = request.query.timeframe || '1h';
-    const days = Number.parseInt(request.query.days || '30', 10);
+    const days = request.query.days != null ? Number.parseInt(request.query.days, 10) : undefined;
     const report = await backtestJob.getReport({ timeframe, days });
     response.json(report);
   } catch (error) {

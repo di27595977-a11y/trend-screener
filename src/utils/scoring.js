@@ -1,18 +1,22 @@
+import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings';
+
 export function calculateTrendScore({
   rSquared,
   pullbackRatio,
   volumeRatio,
   priceChange,
   positionScore: positionMetric,
-}) {
+}, settings = DEFAULT_RUNTIME_SETTINGS) {
+  const thresholds = settings.thresholds || DEFAULT_RUNTIME_SETTINGS.thresholds;
+  const scoring = settings.scoring || DEFAULT_RUNTIME_SETTINGS.scoring;
   const rScore = Math.min(Math.max(rSquared, 0), 1);
   const pullbackScore = Math.max(1 - pullbackRatio / 0.5, 0);
   const volumeScore = Math.min(Math.max(volumeRatio - 1, 0), 1);
-  const changeScore = priceChange >= 3 && priceChange <= 50 ? 1 : 0.3;
+  const changeScore = priceChange >= thresholds.minPriceChange && priceChange <= thresholds.maxPriceChange ? 1 : 0.3;
   const positionScore =
-    positionMetric >= 0.4 && positionMetric <= 0.7
+    positionMetric >= scoring.preferredPositionMin && positionMetric <= scoring.preferredPositionMax
       ? 1
-      : positionMetric >= 0.25 && positionMetric <= 0.85
+      : positionMetric >= scoring.secondaryPositionMin && positionMetric <= scoring.secondaryPositionMax
         ? 0.6
         : 0.3;
 
