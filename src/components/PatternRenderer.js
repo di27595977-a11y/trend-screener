@@ -109,6 +109,31 @@ class PatternRenderer {
     this.drawText(text, 12, y + yOffset, color.replace('88', '').replace('cc', ''));
   }
 
+  drawRangeBand(lowPrice, highPrice, fillColor, strokeColor, text, startX = 0) {
+    if (!this.ctx || !this.canvas) {
+      return;
+    }
+
+    const ratio = window.devicePixelRatio || 1;
+    const width = this.canvas.width / ratio;
+    const lowY = this.series.priceToCoordinate(lowPrice);
+    const highY = this.series.priceToCoordinate(highPrice);
+
+    if (lowY == null || highY == null) {
+      return;
+    }
+
+    const y = Math.min(lowY, highY);
+    const height = Math.max(Math.abs(lowY - highY), 3);
+
+    this.ctx.fillStyle = fillColor;
+    this.ctx.fillRect(startX, y, width - startX, height);
+    this.ctx.strokeStyle = strokeColor;
+    this.ctx.lineWidth = 1;
+    this.ctx.strokeRect(startX, y, width - startX, height);
+    this.drawText(text, startX + 10, y + 14, strokeColor.replace('88', '').replace('cc', ''));
+  }
+
   render() {
     if (!this.ctx || !this.canvas) {
       return;
@@ -210,6 +235,7 @@ class PatternRenderer {
       const color = harmonic.direction === 'bullish' ? '#38bdf8' : '#fb923c';
       const guideColor = harmonic.direction === 'bullish' ? '#38bdf888' : '#fb923c88';
       const targetColor = harmonic.direction === 'bullish' ? '#7dd3fc88' : '#fdba7488';
+      const stopColor = harmonic.direction === 'bullish' ? '#f8717188' : '#f472b688';
       const directionLabel = harmonic.direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
       const points = [
         ['X', harmonic.x],
@@ -258,14 +284,40 @@ class PatternRenderer {
         this.drawText(`${harmonic.label} ${directionLabel}`, anchor.x + 10, anchor.y + (harmonic.direction === 'bullish' ? 18 : -14), color);
       }
 
-      this.drawGuideLine(harmonic.przPrice, guideColor, `PRZ ${harmonic.przPrice.toPrecision(6)}`, harmonic.direction === 'bullish' ? 14 : -6);
+      const bandStartX = Math.max(0, (anchor.x ?? width * 0.55) - 18);
+      this.drawRangeBand(
+        harmonic.przRange[0],
+        harmonic.przRange[1],
+        harmonic.direction === 'bullish' ? '#38bdf822' : '#fb923c22',
+        guideColor,
+        `PRZ ${harmonic.przRange[0].toPrecision(6)} - ${harmonic.przRange[1].toPrecision(6)}`,
+        bandStartX,
+      );
 
-      if (harmonic.reactionConfirmed && harmonic.targetPrice) {
+      this.drawGuideLine(
+        harmonic.stopLoss,
+        stopColor,
+        `\u505c\u640d ${harmonic.stopLoss.toPrecision(6)}`,
+        harmonic.direction === 'bullish' ? 14 : -6,
+        [6, 6],
+      );
+
+      if (harmonic.target1) {
         this.drawGuideLine(
-          harmonic.targetPrice,
+          harmonic.target1,
           targetColor,
-          `\u76ee\u6a19 ${harmonic.targetPrice.toPrecision(6)}`,
+          `T1 ${harmonic.target1.toPrecision(6)}`,
           harmonic.direction === 'bullish' ? -6 : 14,
+        );
+      }
+
+      if (harmonic.target2) {
+        this.drawGuideLine(
+          harmonic.target2,
+          harmonic.direction === 'bullish' ? '#bae6fd88' : '#fed7aa88',
+          `T2 ${harmonic.target2.toPrecision(6)}`,
+          harmonic.direction === 'bullish' ? -6 : 14,
+          [4, 6],
         );
       }
     }

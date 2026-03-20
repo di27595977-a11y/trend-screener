@@ -151,6 +151,43 @@ function scoreRangeFit(value, [min, max], tolerance = HARMONIC_RATIO_TOLERANCE) 
   return Math.max(0, 1 - Math.abs(value - center) / halfSpan);
 }
 
+function sortPriceRange(values) {
+  return [...values].sort((left, right) => left - right);
+}
+
+function nearestValue(values, target) {
+  return [...values].sort((left, right) => Math.abs(left - target) - Math.abs(right - target))[0];
+}
+
+function projectHarmonicLevels(spec, direction, points) {
+  const { x, a, b, c, d } = points;
+  const xa = Math.abs(a.price - x.price);
+  const bc = Math.abs(c.price - b.price);
+  const ad = Math.abs(a.price - d.price);
+  const xadRange =
+    direction === 'bullish'
+      ? sortPriceRange([a.price - xa * spec.xad[0], a.price - xa * spec.xad[1]])
+      : sortPriceRange([a.price + xa * spec.xad[0], a.price + xa * spec.xad[1]]);
+  const bcdRange =
+    direction === 'bullish'
+      ? sortPriceRange([c.price - bc * spec.bcd[0], c.price - bc * spec.bcd[1]])
+      : sortPriceRange([c.price + bc * spec.bcd[0], c.price + bc * spec.bcd[1]]);
+  const przRange = sortPriceRange([nearestValue(xadRange, d.price), d.price, nearestValue(bcdRange, d.price)]);
+  const stopAnchor = direction === 'bullish' ? Math.min(x.price, przRange[0]) : Math.max(x.price, przRange[2]);
+  const stopLoss = direction === 'bullish' ? stopAnchor - xa * 0.03 : stopAnchor + xa * 0.03;
+  const target1 = direction === 'bullish' ? d.price + ad * 0.382 : d.price - ad * 0.382;
+  const target2 = direction === 'bullish' ? d.price + ad * 0.618 : d.price - ad * 0.618;
+
+  return {
+    xadRange,
+    bcdRange,
+    przRange: [przRange[0], przRange[2]],
+    stopLoss,
+    target1,
+    target2,
+  };
+}
+
 function buildHarmonicCandidate(points, candles) {
   if (points.length !== 5) {
     return null;
@@ -221,6 +258,7 @@ function buildHarmonicCandidate(points, candles) {
         scoreRangeFit(ratios.bcd, spec.bcd) +
         scoreRangeFit(ratios.xad, spec.xad)) /
       4;
+    const levels = projectHarmonicLevels(spec, direction, { x, a, b, c, d });
 
     candidates.push({
       type: 'harmonic',
@@ -239,13 +277,18 @@ function buildHarmonicCandidate(points, candles) {
         bcd: spec.bcd,
         xad: spec.xad,
       },
+      projectionRanges: {
+        xad: levels.xadRange,
+        bcd: levels.bcdRange,
+      },
       confidence: fitScore + (reactionConfirmed ? 0.08 : 0),
       reactionConfirmed,
       przPrice: d.price,
-      targetPrice:
-        direction === 'bullish'
-          ? d.price + Math.abs(a.price - d.price) * 0.382
-          : d.price - Math.abs(a.price - d.price) * 0.382,
+      przRange: levels.przRange,
+      stopLoss: levels.stopLoss,
+      targetPrice: levels.target1,
+      target1: levels.target1,
+      target2: levels.target2,
     });
   });
 

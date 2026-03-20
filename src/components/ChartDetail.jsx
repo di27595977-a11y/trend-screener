@@ -25,6 +25,10 @@ const COPY = {
   confidence: '\u53ef\u4fe1\u5ea6',
   actualRatio: '\u5be6\u969b\u6bd4\u7387',
   targetRange: '\u7406\u60f3\u7bc4\u570d',
+  przZone: 'PRZ \u5340\u9593',
+  stopLoss: '\u505c\u640d',
+  target1: 'T1',
+  target2: 'T2',
   insights: '\u5feb\u901f\u89c0\u5bdf',
   supportResistance: '\u652f\u6490 / \u58d3\u529b',
   triangle: '\u4e09\u89d2\u6536\u6582',
@@ -109,6 +113,14 @@ function formatRatioTarget(range) {
   return `${formatRatio(min)} - ${formatRatio(max)}`;
 }
 
+function formatPriceRange(range) {
+  if (!range?.length) {
+    return '--';
+  }
+
+  return `${formatPrice(range[0])} - ${formatPrice(range[1])}`;
+}
+
 function formatLevelType(type) {
   return type === 'support' ? '\u652f\u6490' : '\u58d3\u529b';
 }
@@ -165,12 +177,16 @@ function buildHarmonicSummary(patterns) {
   }
 
   const directionLabel = formatHarmonicDirection(patterns.harmonic.direction);
-  const targetText = patterns.harmonic.targetPrice ? `\u7b2c\u4e00\u76ee\u6a19 ${formatPrice(patterns.harmonic.targetPrice)}` : '\u5148\u89c0\u5bdf PRZ \u5340\u57df\u53cd\u61c9';
+  const targetText = patterns.harmonic.target1
+    ? `${COPY.target1} ${formatPrice(patterns.harmonic.target1)} / ${COPY.target2} ${formatPrice(patterns.harmonic.target2)}`
+    : '\u5148\u89c0\u5bdf PRZ \u5340\u57df\u53cd\u61c9';
   const confirmationText = patterns.harmonic.reactionConfirmed
     ? '\u76ee\u524d\u5df2\u7d93\u958b\u59cb\u51fa\u73fe\u53cd\u61c9\u3002'
     : '\u76ee\u524d\u9084\u5728\u5b8c\u6210\u5340\u9644\u8fd1\uff0c\u53ef\u4ee5\u7b49\u5f85\u53cd\u8f49\u78ba\u8a8d\u3002';
 
-  return `${patterns.harmonic.label} ${directionLabel}\uff0cPRZ \u5728 ${formatPrice(patterns.harmonic.przPrice)}\uff0c${COPY.confidence} ${Math.round(
+  return `${patterns.harmonic.label} ${directionLabel}\uff0c${COPY.przZone} ${formatPriceRange(patterns.harmonic.przRange)}\uff0c${COPY.stopLoss} ${formatPrice(
+    patterns.harmonic.stopLoss,
+  )}\uff0c${COPY.confidence} ${Math.round(
     patterns.harmonic.confidence * 100,
   )}%\uff0c${targetText}\u3002${confirmationText}`;
 }
@@ -533,10 +549,21 @@ export default function ChartDetail() {
               <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                 <p className="font-medium text-white">{`${patterns.harmonic.label} ${formatHarmonicDirection(patterns.harmonic.direction)}`}</p>
                 <p className="mt-1 text-sm text-slate-300">
-                  {`PRZ ${formatPrice(patterns.harmonic.przPrice)}${
-                    patterns.harmonic.targetPrice ? ` \u00b7 T1 ${formatPrice(patterns.harmonic.targetPrice)}` : ''
-                  } \u00b7 ${patterns.harmonic.reactionConfirmed ? '\u5df2\u958b\u59cb\u53cd\u61c9' : '\u7b49\u5f85\u53cd\u61c9'}`}
+                  {`${COPY.przZone} ${formatPriceRange(patterns.harmonic.przRange)} \u00b7 ${COPY.stopLoss} ${formatPrice(
+                    patterns.harmonic.stopLoss,
+                  )} \u00b7 ${patterns.harmonic.reactionConfirmed ? '\u5df2\u958b\u59cb\u53cd\u61c9' : '\u7b49\u5f85\u53cd\u61c9'}`}
                 </p>
+              </div>
+
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.target1}</p>
+                  <p className="mt-1 font-mono text-white">{formatPrice(patterns.harmonic.target1)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-slate-400">{COPY.target2}</p>
+                  <p className="mt-1 font-mono text-white">{formatPrice(patterns.harmonic.target2)}</p>
+                </div>
               </div>
 
               <div className="mt-3 space-y-2">
