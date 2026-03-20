@@ -7,10 +7,11 @@ import StatusBar from './StatusBar';
 import CoinTable from './CoinTable';
 import { loadDashboardSnapshot, triggerScan } from '../services/scanner';
 import { getRuntimeSettings, updateRuntimeSettings } from '../services/binanceApi';
-import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings';
+import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings.js';
 import wsManager from '../services/wsManager';
 
 const DEFAULT_FILTERS = {
+  mode: 'trend',
   timeframe: '1h',
   minScore: 55,
   search: '',
@@ -20,6 +21,12 @@ const DEFAULT_FILTERS = {
     wBottom: false,
     mTop: false,
   },
+};
+
+const MODE_MIN_SCORE = {
+  trend: 55,
+  harmonic: 40,
+  hybrid: 50,
 };
 
 const COPY = {
@@ -61,17 +68,29 @@ function averageScore(rows) {
   return Math.round((total / rows.length) * 10) / 10;
 }
 
-function formatCandidatesDescription(totalSymbols) {
+function formatCandidatesDescription(totalSymbols, mode) {
+  if (mode === 'harmonic') {
+    return `\u5f9e ${totalSymbols || '--'} \u500b\u5408\u7d04\u88e1\u512a\u5148\u6311\u51fa\u53ef\u64cd\u4f5c\u7684 XABCD \u8ae7\u6ce2\u7d50\u69cb\u3002`;
+  }
+
+  if (mode === 'hybrid') {
+    return `\u5f9e ${totalSymbols || '--'} \u500b\u5168\u5e02\u5834\u5e63\u7a2e\u88e1\u540c\u6642\u770b\u8da8\u52e2\u8207\u8ae7\u6ce2\u8a0a\u865f\u3002`;
+  }
+
   return `\u5f9e ${totalSymbols || '--'} \u500b\u5168\u5e02\u5834\u5e63\u7a2e\u88e1\u5feb\u901f\u7e2e\u5c0f\u5230\u5c11\u6578\u5019\u9078\u3002`;
 }
 
-function formatTopDescription(bestRow) {
+function formatTopDescription(bestRow, mode) {
   if (!bestRow) {
-    return COPY.noBest;
+    return mode === 'harmonic'
+      ? '\u76ee\u524d\u9084\u6c92\u6709\u7b26\u5408\u689d\u4ef6\u7684\u8ae7\u6ce2\u5019\u9078'
+      : mode === 'hybrid'
+        ? '\u76ee\u524d\u9084\u6c92\u6709\u7b26\u5408\u8da8\u52e2 / \u8ae7\u6ce2\u7684\u6df7\u5408\u5019\u9078'
+        : COPY.noBest;
   }
 
   const patternCount = bestRow.detectedPatterns?.length || 0;
-  return `\u5206\u6578 ${bestRow.trendScore}\uff0c\u76ee\u524d\u5075\u6e2c\u5230 ${patternCount} \u7a2e\u5f62\u614b\u7dda\u7d22\u3002`;
+  return `${mode === 'harmonic' ? '\u8da8\u52e2\u5e95\u5206' : '\u5206\u6578'} ${bestRow.trendScore}\uff0c\u76ee\u524d\u5075\u6e2c\u5230 ${patternCount} \u7a2e\u5f62\u614b\u7dda\u7d22\u3002`;
 }
 
 export default function Dashboard() {
@@ -125,7 +144,7 @@ export default function Dashboard() {
 
         setStrategySettings(nextSettings);
         setFilters((current) =>
-          current.minScore === DEFAULT_FILTERS.minScore ? { ...current, minScore: nextSettings.scan.minScoreDefault } : current,
+          current.minScore === MODE_MIN_SCORE[current.mode] ? { ...current, minScore: MODE_MIN_SCORE[current.mode] || nextSettings.scan.minScoreDefault } : current,
         );
       } catch (loadError) {
         if (!cancelled) {
@@ -154,6 +173,7 @@ export default function Dashboard() {
           timeframe: filters.timeframe,
           minScore: filters.minScore,
           patterns: toPatternFilterList(filters.patterns),
+          mode: filters.mode,
           force,
         });
 
@@ -187,7 +207,7 @@ export default function Dashboard() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [filters.timeframe, filters.minScore, filters.patterns]);
+  }, [filters.mode, filters.timeframe, filters.minScore, filters.patterns]);
 
   const visibleRows = rows.filter((row) => {
     if (deferredSearch && !row.symbol.includes(deferredSearch)) {
@@ -203,8 +223,9 @@ export default function Dashboard() {
     setRefreshing(true);
 
     try {
-      await triggerScan(filters.timeframe);
+      await triggerScan({ timeframe: filters.timeframe, mode: filters.mode });
       const snapshot = await loadDashboardSnapshot({
+        mode: filters.mode,
         timeframe: filters.timeframe,
         minScore: filters.minScore,
         patterns: toPatternFilterList(filters.patterns),
@@ -232,13 +253,14 @@ export default function Dashboard() {
       setStrategySettings(nextSettings);
       setFilters((current) => ({
         ...current,
-        minScore: nextSettings.scan.minScoreDefault,
+        minScore: MODE_MIN_SCORE[current.mode] || nextSettings.scan.minScoreDefault,
       }));
       setSettingsSavedAt(new Date().toISOString());
-      await triggerScan(filters.timeframe);
+      await triggerScan({ timeframe: filters.timeframe, mode: filters.mode });
       const snapshot = await loadDashboardSnapshot({
+        mode: filters.mode,
         timeframe: filters.timeframe,
-        minScore: nextSettings.scan.minScoreDefault,
+        minScore: MODE_MIN_SCORE[filters.mode] || nextSettings.scan.minScoreDefault,
         patterns: toPatternFilterList(filters.patterns),
       });
 
@@ -286,7 +308,14 @@ export default function Dashboard() {
             <FilterPanel
               filters={filters}
               onChange={(nextValues) => {
-                setFilters((current) => ({ ...current, ...nextValues }));
+                setFilters((current) => {
+                  const nextMode = nextValues.mode || current.mode;
+                  return {
+                    ...current,
+                    ...nextValues,
+                    minScore: nextValues.mode ? MODE_MIN_SCORE[nextMode] || current.minScore : current.minScore,
+                  };
+                });
               }}
             />
           ) : (
@@ -315,7 +344,14 @@ export default function Dashboard() {
           <FilterPanel
             filters={filters}
             onChange={(nextValues) => {
-              setFilters((current) => ({ ...current, ...nextValues }));
+              setFilters((current) => {
+                const nextMode = nextValues.mode || current.mode;
+                return {
+                  ...current,
+                  ...nextValues,
+                  minScore: nextValues.mode ? MODE_MIN_SCORE[nextMode] || current.minScore : current.minScore,
+                };
+              });
             }}
           />
 
@@ -359,7 +395,7 @@ export default function Dashboard() {
           <div className="panel-soft rounded-[24px] px-5 py-5">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.candidates}</p>
             <p className="mt-3 font-mono text-3xl text-white">{visibleRows.length}</p>
-            <p className="mt-2 text-sm text-slate-300">{formatCandidatesDescription(meta.totalSymbols)}</p>
+            <p className="mt-2 text-sm text-slate-300">{formatCandidatesDescription(meta.totalSymbols, filters.mode)}</p>
           </div>
           <div className="panel-soft rounded-[24px] px-5 py-5">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.averageScore}</p>
@@ -371,7 +407,7 @@ export default function Dashboard() {
           <div className="panel-soft rounded-[24px] px-5 py-5 sm:col-span-2 xl:col-span-1">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-400">{COPY.topSetup}</p>
             <p className="mt-3 font-mono text-3xl text-white">{bestRow?.symbol || '--'}</p>
-            <p className="mt-2 text-sm text-slate-300">{formatTopDescription(bestRow)}</p>
+            <p className="mt-2 text-sm text-slate-300">{formatTopDescription(bestRow, filters.mode)}</p>
           </div>
         </div>
 

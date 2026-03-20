@@ -12,6 +12,9 @@ const API_BASE = process.env.BINANCE_API_BASE || 'https://fapi.binance.com';
 const REQUESTS_PER_SECOND = Math.max(Number.parseInt(process.env.BINANCE_REQUESTS_PER_SECOND || '4', 10), 1);
 const SYMBOL_LIMIT = process.env.BINANCE_SYMBOL_LIMIT ? Number.parseInt(process.env.BINANCE_SYMBOL_LIMIT, 10) : null;
 const SCAN_INTERVAL_MS = Math.max(Number.parseInt(process.env.SCAN_INTERVAL_MINUTES || '5', 10), 1) * 60 * 1000;
+const ACTIVE_HARMONIC_STATUSES = new Set(['forming', 'confirmed', 'tp1_hit']);
+const HARMONIC_MIN_SCORE_FLOOR = 40;
+const HYBRID_HARMONIC_MIN_SCORE_FLOOR = 45;
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -46,6 +49,43 @@ function normalizeKline(rawCandle) {
     close: Number(rawCandle[4]),
     volume: Number(rawCandle[5]),
   };
+}
+
+function normalizeScanMode(mode = 'trend') {
+  return ['trend', 'harmonic', 'hybrid'].includes(mode) ? mode : 'trend';
+}
+
+function getPatternHarmonics(patterns) {
+  if (!patterns) {
+    return [];
+  }
+
+  if (patterns.harmonics?.length) {
+    return patterns.harmonics;
+  }
+
+  return patterns.harmonic ? [patterns.harmonic] : [];
+}
+
+function getActionableHarmonic(patterns) {
+  return getPatternHarmonics(patterns).find((pattern) => ACTIVE_HARMONIC_STATUSES.has(pattern.status?.key)) || null;
+}
+
+function sortResultsForMode(results, mode) {
+  const scanMode = normalizeScanMode(mode);
+
+  return [...results].sort((left, right) => {
+    if (scanMode !== 'trend') {
+      const leftHasHarmonic = (left.detectedPatterns || []).some((item) => item.startsWith('harmonic:'));
+      const rightHasHarmonic = (right.detectedPatterns || []).some((item) => item.startsWith('harmonic:'));
+
+      if (leftHasHarmonic !== rightHasHarmonic) {
+        return rightHasHarmonic - leftHasHarmonic;
+      }
+    }
+
+    return right.trendScore - left.trendScore;
+  });
 }
 
 export async function fetchTradableSymbols() {
@@ -115,9 +155,19 @@ async function runBatches(items, batchSize, worker, onProgress) {
   return results;
 }
 
-function filterResults(results, minScore, patterns) {
-  return results.filter((result) => {
-    if (result.trendScore < minScore) {
+function filterResults(results, minScore, patterns, mode = 'trend') {
+  const scanMode = normalizeScanMode(mode);
+
+  return sortResultsForMode(results, scanMode).filter((result) => {
+    const hasHarmonic = result.detectedPatterns.some((item) => item.startsWith('harmonic:'));
+    const effectiveMinScore =
+      scanMode === 'harmonic'
+        ? Math.min(minScore, HARMONIC_MIN_SCORE_FLOOR)
+        : scanMode === 'hybrid' && hasHarmonic
+          ? Math.min(minScore, HYBRID_HARMONIC_MIN_SCORE_FLOOR)
+          : minScore;
+
+    if (result.trendScore < effectiveMinScore) {
       return false;
     }
 
@@ -152,6 +202,7 @@ export class ScanJob {
     this.status = {
       isScanning: false,
       activeTimeframe: null,
+      activeMode: 'trend',
       lastScanAt: null,
       nextScanAt: new Date(Date.now() + scanIntervalMs).toISOString(),
       lastDurationMs: null,
@@ -204,22 +255,24 @@ export class ScanJob {
   }
 
   async refreshAll() {
-    await this.scanTimeframe('1h', { force: true });
-    await this.scanTimeframe('4h', { force: true });
+    await this.scanTimeframe('1h', { force: true, mode: 'trend' });
+    await this.scanTimeframe('4h', { force: true, mode: 'trend' });
   }
 
-  async scanTimeframe(timeframe, { force = false } = {}) {
+  async scanTimeframe(timeframe, { force = false, mode = 'trend' } = {}) {
     if (!SCAN_TIMEFRAME_CONFIG[timeframe]) {
       throw new Error(`Unsupported timeframe: ${timeframe}`);
     }
 
-    const cached = this.cache.get(timeframe);
+    const scanMode = normalizeScanMode(mode);
+    const cacheKey = `${timeframe}:${scanMode}`;
+    const cached = this.cache.get(cacheKey);
 
     if (!force && cached && Date.now() - new Date(cached.meta.scannedAt).getTime() < this.scanIntervalMs) {
       return cached;
     }
 
-    if (this.status.isScanning && this.status.activeTimeframe === timeframe) {
+    if (this.status.isScanning && this.status.activeTimeframe === timeframe && this.status.activeMode === scanMode) {
       return cached || { results: [], meta: { timeframe } };
     }
 
@@ -230,6 +283,7 @@ export class ScanJob {
 
     this.status.isScanning = true;
     this.status.activeTimeframe = timeframe;
+    this.status.activeMode = scanMode;
     this.status.progress = { completed: 0, total: symbols.length, percent: 0 };
 
     const baseResults = await runBatches(
@@ -243,14 +297,16 @@ export class ScanJob {
         }
 
         const metrics = evaluateTrend(candles);
+        const passesTrend = passesTrendThresholds(metrics, runtimeSettings.thresholds);
 
-        if (!passesTrendThresholds(metrics, runtimeSettings.thresholds)) {
+        if (scanMode === 'trend' && !passesTrend) {
           return null;
         }
 
         return {
           ...toScanResult(symbol, timeframe, candles, metrics),
           trendScore: calculateTrendScore(metrics, runtimeSettings),
+          passesTrend,
         };
       },
       (completed, total) => {
@@ -264,23 +320,46 @@ export class ScanJob {
 
     baseResults.sort((left, right) => right.trendScore - left.trendScore);
 
-    const topForPatterns = baseResults.slice(0, runtimeSettings.scan.patternDetectionLimit);
+    const candidatesForPatterns =
+      scanMode === 'trend' ? baseResults.slice(0, runtimeSettings.scan.patternDetectionLimit) : baseResults;
     const patternSummaries = new Map();
+    const patternDetails = new Map();
 
-    await runBatches(topForPatterns, Math.max(1, Math.floor(this.requestsPerSecond / 2)), async (result) => {
+    await runBatches(candidatesForPatterns, Math.max(1, Math.floor(this.requestsPerSecond / 2)), async (result) => {
       const candles = await fetchCandles(result.symbol, '1h', 72);
       const patterns = detectAllPatterns(candles);
+      patternDetails.set(result.symbol, patterns);
       patternSummaries.set(result.symbol, summarizePatterns(patterns));
       return result.symbol;
     });
 
-    const results = baseResults.map((result) => ({
-      ...result,
-      detectedPatterns: patternSummaries.get(result.symbol) || [],
-    }));
+    const results = sortResultsForMode(
+      baseResults
+        .map((result) => {
+          const patterns = patternDetails.get(result.symbol) || null;
+          const actionableHarmonic = getActionableHarmonic(patterns);
+          const detectedPatterns = patternSummaries.get(result.symbol) || [];
+
+          if (scanMode === 'harmonic' && !actionableHarmonic) {
+            return null;
+          }
+
+          if (scanMode === 'hybrid' && !result.passesTrend && !actionableHarmonic) {
+            return null;
+          }
+
+          return {
+            ...result,
+            detectedPatterns,
+          };
+        })
+        .filter(Boolean),
+      scanMode,
+    );
 
     const scannedAt = new Date().toISOString();
     const meta = {
+      mode: scanMode,
       timeframe,
       totalSymbols: symbols.length,
       filteredCount: results.length,
@@ -288,13 +367,17 @@ export class ScanJob {
       durationMs: Date.now() - startedAt,
     };
 
-    this.cache.set(timeframe, { results, meta });
-    this.status.cacheMeta[timeframe] = meta;
+    this.cache.set(cacheKey, { results, meta });
+    this.status.cacheMeta[cacheKey] = meta;
+    if (scanMode === 'trend') {
+      this.status.cacheMeta[timeframe] = meta;
+    }
     this.status.lastScanAt = scannedAt;
     this.status.lastDurationMs = meta.durationMs;
     this.status.nextScanAt = new Date(Date.now() + this.scanIntervalMs).toISOString();
     this.status.isScanning = false;
     this.status.activeTimeframe = null;
+    this.status.activeMode = 'trend';
     this.status.progress = { completed: symbols.length, total: symbols.length, percent: 100 };
 
     await this.persistence?.recordScan({
@@ -302,6 +385,7 @@ export class ScanJob {
       totalSymbols: symbols.length,
       filteredCount: results.length,
       params: {
+        mode: scanMode,
         interval: config.interval,
         limit: config.limit,
         requestsPerSecond: this.requestsPerSecond,
@@ -314,10 +398,10 @@ export class ScanJob {
     return { results, meta };
   }
 
-  async getResults({ timeframe = '1h', minScore, patterns = [], force = false } = {}) {
-    const scan = await this.scanTimeframe(timeframe, { force });
+  async getResults({ timeframe = '1h', minScore, patterns = [], force = false, mode = 'trend' } = {}) {
+    const scan = await this.scanTimeframe(timeframe, { force, mode });
     const runtimeSettings = (await this.persistence?.getRuntimeSettings?.()) || DEFAULT_RUNTIME_SETTINGS;
-    const filteredResults = filterResults(scan.results, minScore ?? runtimeSettings.scan.minScoreDefault, patterns);
+    const filteredResults = filterResults(scan.results, minScore ?? runtimeSettings.scan.minScoreDefault, patterns, mode);
 
     return {
       results: filteredResults,
@@ -332,9 +416,10 @@ if (isDirectRun) {
   const persistence = createPersistenceLayer();
   const job = new ScanJob({ persistence });
   const timeframe = process.argv[2] || '1h';
+  const mode = process.argv[3] || 'trend';
 
   job
-    .scanTimeframe(timeframe, { force: true })
+    .scanTimeframe(timeframe, { force: true, mode })
     .then((result) => {
       console.log(JSON.stringify(result.meta, null, 2));
       console.log(`Candidates: ${result.results.length}`);

@@ -15,6 +15,7 @@ function sleep(ms: number) {
 }
 
 const REQUESTS_PER_SECOND = Math.max(Number.parseInt(Deno.env.get('BINANCE_REQUESTS_PER_SECOND') || '4', 10), 1);
+const ACTIVE_HARMONIC_STATUSES = new Set(['forming', 'confirmed', 'tp1_hit']);
 
 async function runBatches<T, R>(
   items: T[],
@@ -69,9 +70,47 @@ function calculateRangeStats(candles: any[], entryPrice: number) {
   };
 }
 
-export async function runScan(admin: any, timeframe: string) {
+function normalizeScanMode(mode = 'trend') {
+  return ['trend', 'harmonic', 'hybrid'].includes(mode) ? mode : 'trend';
+}
+
+function getPatternHarmonics(patterns: any) {
+  if (!patterns) {
+    return [];
+  }
+
+  if (patterns.harmonics?.length) {
+    return patterns.harmonics;
+  }
+
+  return patterns.harmonic ? [patterns.harmonic] : [];
+}
+
+function getActionableHarmonic(patterns: any) {
+  return getPatternHarmonics(patterns).find((pattern: any) => ACTIVE_HARMONIC_STATUSES.has(pattern.status?.key)) || null;
+}
+
+function sortResultsForMode(results: any[], mode = 'trend') {
+  const scanMode = normalizeScanMode(mode);
+
+  return [...results].sort((left, right) => {
+    if (scanMode !== 'trend') {
+      const leftHasHarmonic = (left.detectedPatterns || []).some((item: string) => item.startsWith('harmonic:'));
+      const rightHasHarmonic = (right.detectedPatterns || []).some((item: string) => item.startsWith('harmonic:'));
+
+      if (leftHasHarmonic !== rightHasHarmonic) {
+        return Number(rightHasHarmonic) - Number(leftHasHarmonic);
+      }
+    }
+
+    return right.trendScore - left.trendScore;
+  });
+}
+
+export async function runScan(admin: any, timeframe: string, mode = 'trend') {
   const config = SCAN_TIMEFRAME_CONFIG[timeframe];
   if (!config) throw new Error(`Unsupported timeframe: ${timeframe}`);
+  const scanMode = normalizeScanMode(mode);
 
   const symbols = await fetchTradableSymbols();
   const startedAt = Date.now();
@@ -80,6 +119,7 @@ export async function runScan(admin: any, timeframe: string) {
   await setAppState(admin, 'scanner', {
     isScanning: true,
     activeTimeframe: timeframe,
+    activeMode: scanMode,
     progress: { completed: 0, total: symbols.length, percent: 0 },
   });
 
@@ -91,7 +131,8 @@ export async function runScan(admin: any, timeframe: string) {
       if (candles.length < config.limit) return null;
 
       const metrics = evaluateTrend(candles);
-      if (!passesTrendThresholds(metrics, runtimeSettings.thresholds)) return null;
+      const passesTrend = passesTrendThresholds(metrics, runtimeSettings.thresholds);
+      if (scanMode === 'trend' && !passesTrend) return null;
 
       return {
         symbol,
@@ -108,34 +149,60 @@ export async function runScan(admin: any, timeframe: string) {
         currentPrice: metrics.latestClose,
         detectedPatterns: [],
         sparkline: buildSparkline(candles, config.sparkLimit),
+        passesTrend,
       };
     },
     async (completed, total) => {
       await setAppState(admin, 'scanner', {
         isScanning: true,
         activeTimeframe: timeframe,
+        activeMode: scanMode,
         progress: { completed, total, percent: total ? Math.round((completed / total) * 100) : 0 },
       });
     },
   );
 
   baseResults.sort((left, right) => right.trendScore - left.trendScore);
-  const topForPatterns = baseResults.slice(0, runtimeSettings.scan.patternDetectionLimit);
+  const candidatesForPatterns =
+    scanMode === 'trend' ? baseResults.slice(0, runtimeSettings.scan.patternDetectionLimit) : baseResults;
   const patternMap = new Map<string, string[]>();
+  const patternDetails = new Map<string, any>();
 
-  await runBatches(topForPatterns, Math.max(1, Math.floor(REQUESTS_PER_SECOND / 2)), async (result) => {
+  await runBatches(candidatesForPatterns, Math.max(1, Math.floor(REQUESTS_PER_SECOND / 2)), async (result) => {
     const candles = await fetchCandles(result.symbol, '1h', 72);
-    patternMap.set(result.symbol, summarizePatterns(detectAllPatterns(candles)));
+    const patterns = detectAllPatterns(candles);
+    patternDetails.set(result.symbol, patterns);
+    patternMap.set(result.symbol, summarizePatterns(patterns));
     return result.symbol;
   });
 
-  const results = baseResults.map((result) => ({
-    ...result,
-    detectedPatterns: patternMap.get(result.symbol) || [],
-  }));
+  const results = sortResultsForMode(
+    baseResults
+      .map((result) => {
+        const patterns = patternDetails.get(result.symbol) || null;
+        const actionableHarmonic = getActionableHarmonic(patterns);
+        const detectedPatterns = patternMap.get(result.symbol) || [];
+
+        if (scanMode === 'harmonic' && !actionableHarmonic) {
+          return null;
+        }
+
+        if (scanMode === 'hybrid' && !result.passesTrend && !actionableHarmonic) {
+          return null;
+        }
+
+        return {
+          ...result,
+          detectedPatterns,
+        };
+      })
+      .filter(Boolean),
+    scanMode,
+  );
 
   const scannedAt = new Date().toISOString();
   const meta = {
+    mode: scanMode,
     timeframe,
     totalSymbols: symbols.length,
     filteredCount: results.length,
@@ -147,7 +214,7 @@ export async function runScan(admin: any, timeframe: string) {
     timeframe,
     totalSymbols: symbols.length,
     filteredCount: results.length,
-    params: { interval: config.interval, limit: config.limit, requestsPerSecond: REQUESTS_PER_SECOND, runtimeSettings },
+    params: { mode: scanMode, interval: config.interval, limit: config.limit, requestsPerSecond: REQUESTS_PER_SECOND, runtimeSettings },
     scannedAt,
     results,
   });
@@ -155,11 +222,12 @@ export async function runScan(admin: any, timeframe: string) {
   await setAppState(admin, 'scanner', {
     isScanning: false,
     activeTimeframe: null,
+    activeMode: 'trend',
     lastScanAt: scannedAt,
     nextScanAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     lastDurationMs: meta.durationMs,
     progress: { completed: symbols.length, total: symbols.length, percent: 100 },
-    cacheMeta: { [timeframe]: meta },
+    cacheMeta: scanMode === 'trend' ? { [timeframe]: meta, [`${timeframe}:${scanMode}`]: meta } : { [`${timeframe}:${scanMode}`]: meta },
   });
 
   return { results, meta };

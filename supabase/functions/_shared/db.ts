@@ -167,11 +167,12 @@ export async function recordScan(
   return snapshot;
 }
 
-export async function getLatestScanResults(admin: ReturnType<typeof createAdminClient>, timeframe: string) {
+export async function getLatestScanResults(admin: ReturnType<typeof createAdminClient>, timeframe: string, mode = 'trend') {
   const { data: snapshot, error: snapshotError } = await admin
     .from('scan_snapshots')
     .select('*')
     .eq('timeframe', timeframe)
+    .contains('params', { mode })
     .order('scanned_at', { ascending: false })
     .limit(1)
     .maybeSingle();

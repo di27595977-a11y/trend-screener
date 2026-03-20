@@ -48,10 +48,12 @@ app.get('/api/scan', async (request, response, next) => {
         ? [request.query.pattern]
         : [];
     const timeframe = request.query.timeframe || '1h';
+    const mode = request.query.mode || 'trend';
     const minScore = request.query.minScore != null ? Number.parseInt(request.query.minScore, 10) : undefined;
     const force = request.query.force === '1';
     const result = await scanJob.getResults({
       timeframe,
+      mode,
       minScore,
       patterns,
       force,
@@ -65,12 +67,13 @@ app.get('/api/scan', async (request, response, next) => {
 
 app.post('/api/scan', (request, response) => {
   const timeframe = request.body?.timeframe || '1h';
+  const mode = request.body?.mode || 'trend';
 
-  scanJob.scanTimeframe(timeframe, { force: true }).catch((error) => {
+  scanJob.scanTimeframe(timeframe, { force: true, mode }).catch((error) => {
     console.error('Manual scan failed', error);
   });
 
-  response.status(202).json({ ok: true, timeframe });
+  response.status(202).json({ ok: true, timeframe, mode });
 });
 
 app.get('/api/scan/:symbol', async (request, response, next) => {

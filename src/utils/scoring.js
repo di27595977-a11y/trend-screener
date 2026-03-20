@@ -1,4 +1,4 @@
-import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings';
+import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings.js';
 
 export function calculateTrendScore({
   rSquared,

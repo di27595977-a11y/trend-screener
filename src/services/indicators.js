@@ -1,4 +1,4 @@
-import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings';
+import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings.js';
 
 export const SCAN_TIMEFRAME_CONFIG = {
   '1h': { interval: '1h', limit: 24, label: '1H', sparkLimit: 24 },

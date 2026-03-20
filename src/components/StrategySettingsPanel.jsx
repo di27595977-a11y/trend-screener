@@ -1,4 +1,4 @@
-import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings';
+import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings.js';
 
 const FIELD_GROUPS = [
   {

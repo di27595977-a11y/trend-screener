@@ -257,9 +257,11 @@ export function createPersistenceLayer() {
       return snapshotData;
     },
 
-    async getLatestScanResults(timeframe) {
+    async getLatestScanResults(timeframe, mode = 'trend') {
       if (!supabase) {
-        const snapshot = memory.snapshots.find((item) => item.timeframe === timeframe);
+        const snapshot = memory.snapshots.find(
+          (item) => item.timeframe === timeframe && ((item.params?.mode || 'trend') === mode),
+        );
 
         if (!snapshot) {
           return { snapshot: null, results: [] };
@@ -277,6 +279,7 @@ export function createPersistenceLayer() {
         .from('scan_snapshots')
         .select('*')
         .eq('timeframe', timeframe)
+        .contains('params', { mode })
         .order('scanned_at', { ascending: false })
         .limit(1)
         .maybeSingle();

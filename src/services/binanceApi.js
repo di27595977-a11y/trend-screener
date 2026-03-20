@@ -98,13 +98,14 @@ export async function updateRuntimeSettings(settings) {
   });
 }
 
-export async function getScanResults({ timeframe = '1h', minScore = 55, patterns = [], force = false } = {}) {
-  const data = await invokeTrendApi('scan-results', { timeframe, minScore, patterns, force });
+export async function getScanResults({ timeframe = '1h', minScore = 55, patterns = [], force = false, mode = 'trend' } = {}) {
+  const data = await invokeTrendApi('scan-results', { timeframe, minScore, patterns, force, mode });
   if (data) return data;
 
   const params = new URLSearchParams();
   params.set('timeframe', timeframe);
   params.set('minScore', String(minScore));
+  params.set('mode', mode);
 
   if (force) {
     params.set('force', '1');
@@ -116,12 +117,19 @@ export async function getScanResults({ timeframe = '1h', minScore = 55, patterns
 }
 
 export async function triggerScan(timeframe = '1h') {
-  const data = await invokeTrendApi('run-scan', { timeframe });
+  let mode = 'trend';
+
+  if (typeof timeframe === 'object' && timeframe !== null) {
+    mode = timeframe.mode || 'trend';
+    timeframe = timeframe.timeframe || '1h';
+  }
+
+  const data = await invokeTrendApi('run-scan', { timeframe, mode });
   if (data) return data;
 
   return requestJson('/scan', {
     method: 'POST',
-    body: JSON.stringify({ timeframe }),
+    body: JSON.stringify({ timeframe, mode }),
   });
 }
 

@@ -12,9 +12,28 @@ import {
 } from '../_shared/db.ts';
 import { runBacktest, runScan } from '../_shared/jobs.ts';
 
-function filterResults(results: any[], minScore: number, patterns: string[]) {
-  return results.filter((result) => {
-    if (result.trendScore < minScore) return false;
+function sortResultsForMode(results: any[], mode = 'trend') {
+  return [...results].sort((left, right) => {
+    if (mode !== 'trend') {
+      const leftHasHarmonic = (left.detectedPatterns || []).some((item: string) => item.startsWith('harmonic:'));
+      const rightHasHarmonic = (right.detectedPatterns || []).some((item: string) => item.startsWith('harmonic:'));
+
+      if (leftHasHarmonic !== rightHasHarmonic) {
+        return Number(rightHasHarmonic) - Number(leftHasHarmonic);
+      }
+    }
+
+    return right.trendScore - left.trendScore;
+  });
+}
+
+function filterResults(results: any[], minScore: number, patterns: string[], mode = 'trend') {
+  return sortResultsForMode(results, mode).filter((result) => {
+    const hasHarmonic = (result.detectedPatterns || []).some((item: string) => item.startsWith('harmonic:'));
+    const effectiveMinScore =
+      mode === 'harmonic' ? Math.min(minScore, 40) : mode === 'hybrid' && hasHarmonic ? Math.min(minScore, 45) : minScore;
+
+    if (result.trendScore < effectiveMinScore) return false;
     if (!patterns.length) return true;
 
     return patterns.every((pattern) => {
@@ -88,20 +107,22 @@ Deno.serve(async (request) => {
 
     if (action === 'scan-results') {
       const timeframe = body.timeframe || '1h';
+      const mode = body.mode || 'trend';
       const settings = await getRuntimeSettings(admin);
       const minScore = body.minScore != null ? Number.parseInt(body.minScore, 10) : settings.scan.minScoreDefault;
       const patterns = Array.isArray(body.patterns) ? body.patterns : [];
       const force = Boolean(body.force);
-      const snapshot = force ? await runScan(admin, timeframe) : await getLatestScanResults(admin, timeframe);
+      const snapshot = force ? await runScan(admin, timeframe, mode) : await getLatestScanResults(admin, timeframe, mode);
 
       if (!force && !snapshot.results?.length) {
-        const refreshed = await runScan(admin, timeframe);
-        return json({ results: filterResults(refreshed.results, minScore, patterns), meta: refreshed.meta });
+        const refreshed = await runScan(admin, timeframe, mode);
+        return json({ results: filterResults(refreshed.results, minScore, patterns, mode), meta: refreshed.meta });
       }
 
       return json({
-        results: filterResults(snapshot.results || [], minScore, patterns),
+        results: filterResults(snapshot.results || [], minScore, patterns, mode),
         meta: snapshot.meta || {
+          mode,
           timeframe,
           totalSymbols: snapshot.snapshot?.total_symbols || 0,
           filteredCount: snapshot.results?.length || 0,
@@ -112,7 +133,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'run-scan') {
-      return json(await runScan(admin, body.timeframe || '1h'));
+      return json(await runScan(admin, body.timeframe || '1h', body.mode || 'trend'));
     }
 
     if (action === 'symbol-overview') {
