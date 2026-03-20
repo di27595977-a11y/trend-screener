@@ -4,11 +4,13 @@ import { CandlestickSeries, HistogramSeries, createChart } from 'lightweight-cha
 import PatternRenderer from './PatternRenderer';
 import PatternTags from './PatternTags';
 import ScoreBadge from './ScoreBadge';
+import TradeAdvicePanel from './TradeAdvicePanel';
 import { buildBinanceChartUrl, buildTradingViewUrl, getSymbolCandles, getSymbolOverview } from '../services/binanceApi';
 import wsManager from '../services/wsManager';
 import { detectAllPatterns } from '../services/patternDetection';
 import { evaluateTrend } from '../services/indicators';
 import { calculateTrendScore } from '../utils/scoring';
+import { generateTradeAdvice } from '../lib/tradeAdvisor';
 
 const COPY = {
   back: '\u56de\u5230\u5100\u8868\u677f',
@@ -224,6 +226,48 @@ function buildReversalSummary(patterns) {
   return COPY.noReversal;
 }
 
+function buildTradeLevels(patterns) {
+  const supportLevels = (patterns?.supportResistance || [])
+    .filter((level) => level.type === 'support')
+    .map((level) => ({ price: level.price, touches: level.touches }))
+    .sort((left, right) => left.price - right.price);
+  const resistanceLevels = (patterns?.supportResistance || [])
+    .filter((level) => level.type === 'resistance')
+    .map((level) => ({ price: level.price, touches: level.touches }))
+    .sort((left, right) => left.price - right.price);
+
+  return { supportLevels, resistanceLevels };
+}
+
+function buildAdvisorPatterns(patterns) {
+  if (!patterns) {
+    return {
+      harmonic: null,
+      wBottom: null,
+      mTop: null,
+      triangle: null,
+    };
+  }
+
+  return {
+    harmonic: patterns.harmonic
+      ? {
+          type: patterns.harmonic.key,
+          direction: patterns.harmonic.direction,
+          prz: patterns.harmonic.przRange,
+          stopLoss: patterns.harmonic.stopLoss,
+          t1: patterns.harmonic.target1,
+          t2: patterns.harmonic.target2,
+          confidence: patterns.harmonic.confidence,
+          reactionConfirmed: patterns.harmonic.reactionConfirmed,
+        }
+      : null,
+    wBottom: patterns.wBottom ? { neckline: patterns.wBottom.necklinePrice } : null,
+    mTop: patterns.mTop ? { neckline: patterns.mTop.necklinePrice } : null,
+    triangle: patterns.triangle ? { type: patterns.triangle.type } : null,
+  };
+}
+
 export default function ChartDetail() {
   const { symbol } = useParams();
   const location = useLocation();
@@ -386,6 +430,14 @@ export default function ChartDetail() {
     }
   }, [candles]);
 
+  const currentMetrics = useMemo(() => {
+    if (!candles.length) {
+      return null;
+    }
+
+    return evaluateTrend(candles.slice(-24));
+  }, [candles]);
+
   const visiblePatterns = useMemo(() => {
     if (!patterns) {
       return null;
@@ -449,6 +501,27 @@ export default function ChartDetail() {
   }, [candles]);
 
   const scoreSource = overview || fallbackOverview(candles);
+  const tradeAdvice = useMemo(() => {
+    if (!patterns) {
+      return null;
+    }
+
+    const levels = buildTradeLevels(patterns);
+    const effectiveMetrics = currentMetrics || {};
+
+    return generateTradeAdvice({
+      currentPrice: livePrice ?? candles.at(-1)?.close ?? scoreSource?.entryPrice,
+      positionScore: effectiveMetrics.positionScore ?? scoreSource?.positionScore,
+      score: scoreSource?.trendScore ?? (currentMetrics ? calculateTrendScore(currentMetrics) : null),
+      priceChange: effectiveMetrics.priceChange ?? scoreSource?.priceChangePct,
+      patterns: buildAdvisorPatterns(patterns),
+      supportLevels: levels.supportLevels,
+      resistanceLevels: levels.resistanceLevels,
+      pullbackRatio: effectiveMetrics.pullbackRatio,
+      rSquared: effectiveMetrics.rSquared ?? scoreSource?.rSquared,
+      volumeRatio: effectiveMetrics.volumeRatio,
+    });
+  }, [candles, currentMetrics, livePrice, patterns, scoreSource]);
 
   return (
     <div className="space-y-6">
@@ -608,6 +681,8 @@ export default function ChartDetail() {
               </div>
             </div>
           </section>
+
+          <TradeAdvicePanel advice={tradeAdvice} currentPrice={livePrice ?? candles.at(-1)?.close ?? null} />
         </div>
       </section>
     </div>
