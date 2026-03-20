@@ -56,7 +56,7 @@ Deno.serve(async (request) => {
 
     if (action === 'scan-results') {
       const timeframe = body.timeframe || '1h';
-      const minScore = Number.parseInt(body.minScore || '60', 10);
+      const minScore = Number.parseInt(body.minScore || '55', 10);
       const patterns = Array.isArray(body.patterns) ? body.patterns : [];
       const force = Boolean(body.force);
       const snapshot = force ? await runScan(admin, timeframe) : await getLatestScanResults(admin, timeframe);
@@ -95,7 +95,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'backtest-report') {
-      return json(await buildBacktestReport(admin, { timeframe: body.timeframe || '1h', days: Number(body.days || 14) }));
+      return json(await buildBacktestReport(admin, { timeframe: body.timeframe || '1h', days: Number(body.days || 30) }));
     }
 
     if (action === 'run-backtest') {

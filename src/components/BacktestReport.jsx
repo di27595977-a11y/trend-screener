@@ -100,7 +100,7 @@ function EmptyStateRow({ columns }) {
 
 export default function BacktestReport() {
   const [timeframe, setTimeframe] = useState('1h');
-  const [days, setDays] = useState(14);
+  const [days, setDays] = useState(30);
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

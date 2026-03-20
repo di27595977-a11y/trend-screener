@@ -4,13 +4,13 @@ export const SCAN_TIMEFRAME_CONFIG = {
 };
 
 export const DEFAULT_THRESHOLDS = {
-  minRSquared: 0.7,
+  minRSquared: 0.6,
   maxPullbackRatio: 0.35,
-  minVolumeRatio: 1.2,
-  minPriceChange: 5,
+  minVolumeRatio: 1.1,
+  minPriceChange: 3,
   maxPriceChange: 50,
-  preferredPositionMin: 0.6,
-  preferredPositionMax: 0.85,
+  preferredPositionMin: 0.4,
+  preferredPositionMax: 0.7,
 };
 
 export function linearRegression(prices) {

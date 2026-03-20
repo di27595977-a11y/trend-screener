@@ -49,7 +49,7 @@ export async function getScannerStatus() {
   return requestJson('/status');
 }
 
-export async function getScanResults({ timeframe = '1h', minScore = 60, patterns = [], force = false } = {}) {
+export async function getScanResults({ timeframe = '1h', minScore = 55, patterns = [], force = false } = {}) {
   const data = await invokeTrendApi('scan-results', { timeframe, minScore, patterns, force });
   if (data) return data;
 
@@ -90,7 +90,7 @@ export async function getSymbolCandles(symbol, { interval = '1h', limit = 72 } =
   return requestJson(`/chart/${symbol}?${params.toString()}`);
 }
 
-export async function getBacktestReport({ timeframe = '1h', days = 14 } = {}) {
+export async function getBacktestReport({ timeframe = '1h', days = 30 } = {}) {
   const data = await invokeTrendApi('backtest-report', { timeframe, days });
   if (data) return data;
 

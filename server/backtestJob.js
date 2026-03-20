@@ -6,6 +6,7 @@ import { fetchCandles } from './scanJob.js';
 dotenv.config();
 
 const BACKTEST_INTERVAL_MS = Math.max(Number.parseInt(process.env.BACKTEST_INTERVAL_MINUTES || '60', 10), 1) * 60 * 1000;
+const BACKTEST_LOOKUP_CANDLE_LIMIT = 100;
 
 function pickPriceAtHours(candles, createdAtMs, hours) {
   const targetTime = createdAtMs + hours * 60 * 60 * 1000;
@@ -81,7 +82,7 @@ export class BacktestJob {
     for (const entry of pendingEntries) {
       const createdAtMs = new Date(entry.created_at).getTime();
       const endTime = Math.min(createdAtMs + 72 * 60 * 60 * 1000, Date.now());
-      const candles = await fetchCandles(entry.symbol, '1h', 72, {
+      const candles = await fetchCandles(entry.symbol, '1h', BACKTEST_LOOKUP_CANDLE_LIMIT, {
         startTime: createdAtMs,
         endTime,
       });

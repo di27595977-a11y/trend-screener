@@ -8,7 +8,7 @@ import wsManager from '../services/wsManager';
 
 const DEFAULT_FILTERS = {
   timeframe: '1h',
-  minScore: 60,
+  minScore: 55,
   search: '',
   patterns: {
     triangle: false,

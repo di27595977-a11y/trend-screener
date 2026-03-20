@@ -32,7 +32,7 @@ app.get('/api/scan', async (request, response, next) => {
         ? [request.query.pattern]
         : [];
     const timeframe = request.query.timeframe || '1h';
-    const minScore = Number.parseInt(request.query.minScore || '60', 10);
+    const minScore = Number.parseInt(request.query.minScore || '55', 10);
     const force = request.query.force === '1';
     const result = await scanJob.getResults({
       timeframe,
@@ -85,7 +85,7 @@ app.get('/api/chart/:symbol', async (request, response, next) => {
 app.get('/api/backtest/report', async (request, response, next) => {
   try {
     const timeframe = request.query.timeframe || '1h';
-    const days = Number.parseInt(request.query.days || '14', 10);
+    const days = Number.parseInt(request.query.days || '30', 10);
     const report = await backtestJob.getReport({ timeframe, days });
     response.json(report);
   } catch (error) {

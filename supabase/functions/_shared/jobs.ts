@@ -15,6 +15,8 @@ function sleep(ms: number) {
 }
 
 const REQUESTS_PER_SECOND = Math.max(Number.parseInt(Deno.env.get('BINANCE_REQUESTS_PER_SECOND') || '4', 10), 1);
+const PATTERN_DETECTION_LIMIT = 50;
+const BACKTEST_LOOKUP_CANDLE_LIMIT = 100;
 
 async function runBatches<T, R>(
   items: T[],
@@ -119,7 +121,7 @@ export async function runScan(admin: any, timeframe: string) {
   );
 
   baseResults.sort((left, right) => right.trendScore - left.trendScore);
-  const topForPatterns = baseResults.slice(0, 36);
+  const topForPatterns = baseResults.slice(0, PATTERN_DETECTION_LIMIT);
   const patternMap = new Map<string, string[]>();
 
   await runBatches(topForPatterns, Math.max(1, Math.floor(REQUESTS_PER_SECOND / 2)), async (result) => {
@@ -172,7 +174,7 @@ export async function runBacktest(admin: any) {
   for (const entry of pending) {
     const createdAtMs = new Date(entry.created_at).getTime();
     const endTime = Math.min(createdAtMs + 72 * 60 * 60 * 1000, Date.now());
-    const candles = await fetchCandles(entry.symbol, '1h', 72, { startTime: createdAtMs, endTime });
+    const candles = await fetchCandles(entry.symbol, '1h', BACKTEST_LOOKUP_CANDLE_LIMIT, { startTime: createdAtMs, endTime });
     if (!candles.length) continue;
 
     const rangeStats = calculateRangeStats(candles, Number(entry.entry_price));

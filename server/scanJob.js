@@ -11,6 +11,7 @@ const API_BASE = process.env.BINANCE_API_BASE || 'https://fapi.binance.com';
 const REQUESTS_PER_SECOND = Math.max(Number.parseInt(process.env.BINANCE_REQUESTS_PER_SECOND || '4', 10), 1);
 const SYMBOL_LIMIT = process.env.BINANCE_SYMBOL_LIMIT ? Number.parseInt(process.env.BINANCE_SYMBOL_LIMIT, 10) : null;
 const SCAN_INTERVAL_MS = Math.max(Number.parseInt(process.env.SCAN_INTERVAL_MINUTES || '5', 10), 1) * 60 * 1000;
+const PATTERN_DETECTION_LIMIT = 50;
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -259,7 +260,7 @@ export class ScanJob {
 
     baseResults.sort((left, right) => right.trendScore - left.trendScore);
 
-    const topForPatterns = baseResults.slice(0, 36);
+    const topForPatterns = baseResults.slice(0, PATTERN_DETECTION_LIMIT);
     const patternSummaries = new Map();
 
     await runBatches(topForPatterns, Math.max(1, Math.floor(this.requestsPerSecond / 2)), async (result) => {
@@ -308,7 +309,7 @@ export class ScanJob {
     return { results, meta };
   }
 
-  async getResults({ timeframe = '1h', minScore = 60, patterns = [], force = false } = {}) {
+  async getResults({ timeframe = '1h', minScore = 55, patterns = [], force = false } = {}) {
     const scan = await this.scanTimeframe(timeframe, { force });
     const filteredResults = filterResults(scan.results, minScore, patterns);
 

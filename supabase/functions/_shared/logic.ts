@@ -127,11 +127,11 @@ export function evaluateTrend(candles: Candle[]): TrendMetrics {
 
 export function passesTrendThresholds(metrics: TrendMetrics) {
   return (
-    metrics.rSquared >= 0.7 &&
+    metrics.rSquared >= 0.6 &&
     metrics.slope > 0 &&
     metrics.pullbackRatio <= 0.35 &&
-    metrics.volumeRatio >= 1.2 &&
-    metrics.priceChange >= 5 &&
+    metrics.volumeRatio >= 1.1 &&
+    metrics.priceChange >= 3 &&
     metrics.priceChange <= 50
   );
 }
@@ -144,11 +144,11 @@ export function calculateTrendScore(metrics: TrendMetrics) {
   const rScore = Math.min(Math.max(metrics.rSquared, 0), 1);
   const pullbackScore = Math.max(1 - metrics.pullbackRatio / 0.5, 0);
   const volumeScore = Math.min(Math.max(metrics.volumeRatio - 1, 0), 1);
-  const changeScore = metrics.priceChange >= 5 && metrics.priceChange <= 50 ? 1 : 0.3;
+  const changeScore = metrics.priceChange >= 3 && metrics.priceChange <= 50 ? 1 : 0.3;
   const positionValue =
-    metrics.positionScore >= 0.6 && metrics.positionScore <= 0.85
+    metrics.positionScore >= 0.4 && metrics.positionScore <= 0.7
       ? 1
-      : metrics.positionScore >= 0.4
+      : metrics.positionScore >= 0.25 && metrics.positionScore <= 0.85
         ? 0.6
         : 0.3;
 

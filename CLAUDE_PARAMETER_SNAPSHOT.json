@@ -1,0 +1,313 @@
+{
+  "snapshotDate": "2026-03-20",
+  "source": "Repository code defaults and current UI defaults",
+  "notes": [
+    "No local .env override file was found in this workspace, so environment-driven runtime overrides may differ in deployed environments.",
+    "Secrets and tokens are intentionally omitted."
+  ],
+  "marketUniverse": {
+    "exchange": "Binance Futures",
+    "product": "USDT-M perpetual contracts",
+    "symbolFilter": {
+      "status": "TRADING",
+      "contractType": "PERPETUAL",
+      "quoteAsset": "USDT"
+    }
+  },
+  "scanTimeframes": {
+    "1h": {
+      "interval": "1h",
+      "scanCandleLimit": 24,
+      "sparklineLimit": 24
+    },
+    "4h": {
+      "interval": "4h",
+      "scanCandleLimit": 30,
+      "sparklineLimit": 30
+    }
+  },
+  "trendThresholds": {
+    "minRSquared": 0.6,
+    "slopeMustBePositive": true,
+    "maxPullbackRatio": 0.35,
+    "minVolumeRatio": 1.1,
+    "minPriceChangePercent": 3,
+    "maxPriceChangePercent": 50,
+    "preferredPositionMin": 0.4,
+    "preferredPositionMax": 0.7
+  },
+  "trendMetrics": {
+    "linearRegression": {
+      "input": "close prices",
+      "outputs": [
+        "slope",
+        "intercept",
+        "rSquared"
+      ]
+    },
+    "pullbackRatio": "After the highest high in the window, measure how deep price pulls back relative to full range.",
+    "volumeRatio": "average up-candle volume / average down-candle volume",
+    "priceChangePercent": "(lastClose - firstClose) / firstClose * 100",
+    "positionScore": "(currentPrice - rangeLow) / (rangeHigh - rangeLow)"
+  },
+  "trendScoring": {
+    "weights": {
+      "rSquared": 30,
+      "pullbackRatio": 25,
+      "volumeRatio": 20,
+      "priceChange": 15,
+      "positionScore": 10
+    },
+    "componentRules": {
+      "rSquared": "clamp(rSquared, 0, 1)",
+      "pullbackRatio": "max(1 - pullbackRatio / 0.5, 0)",
+      "volumeRatio": "clamp(volumeRatio - 1, 0, 1)",
+      "priceChange": "1 when 3 <= priceChange <= 50, else 0.3",
+      "positionScore": "1 when 0.4 <= position <= 0.7, else 0.6 when 0.25 <= position <= 0.85, else 0.3"
+    },
+    "scoreOutput": "round(weighted sum)",
+    "scoreBuckets": [
+      "80+",
+      "70-79",
+      "60-69",
+      "<60"
+    ]
+  },
+  "scannerRuntime": {
+    "apiBaseDefault": "https://fapi.binance.com",
+    "requestsPerSecondDefault": 4,
+    "symbolLimitDefault": null,
+    "scanIntervalMinutesDefault": 5,
+    "symbolListCacheMinutes": 60,
+    "patternDetectionRunsOnTopNCandidates": 50,
+    "patternDetectionBatchSizeFormula": "max(1, floor(requestsPerSecond / 2))",
+    "refreshOrder": [
+      "1h",
+      "4h"
+    ]
+  },
+  "dashboardDefaults": {
+    "timeframe": "1h",
+    "minScore": 55,
+    "search": "",
+    "patternFilters": {
+      "triangle": false,
+      "harmonic": false,
+      "wBottom": false,
+      "mTop": false
+    },
+    "silentRefreshIntervalSeconds": 15
+  },
+  "patternDetectionDefaults": {
+    "lookback": 3,
+    "supportResistanceTolerance": 0.005,
+    "reversalTolerance": 0.02,
+    "minHarmonicConfidence": 0.7
+  },
+  "supportResistance": {
+    "priceClusteringTolerance": 0.005,
+    "minimumTouches": 2,
+    "maxLevelsReturned": 6,
+    "summaryLevelsUsed": 2
+  },
+  "triangleDetection": {
+    "recentHighsUsed": 4,
+    "recentLowsUsed": 4,
+    "requireUpperSlopeLessThanOrEqualLowerSlope": true,
+    "rejectIfParallel": true,
+    "apexMustBeAfterLastSwing": true,
+    "apexMaxForwardDistanceRatio": 0.5,
+    "flatSlopeThreshold": 0.0001,
+    "types": [
+      "ascending",
+      "descending",
+      "symmetric"
+    ]
+  },
+  "reversalDetection": {
+    "wBottom": {
+      "priceTolerance": 0.02,
+      "spacingBarsMin": 5,
+      "spacingBarsMax": 48,
+      "necklineMustExceedFeetByAtLeastPercent": 1
+    },
+    "mTop": {
+      "priceTolerance": 0.02,
+      "spacingBarsMin": 5,
+      "spacingBarsMax": 48,
+      "necklineMustBeBelowPeaksByAtLeastPercent": 1
+    }
+  },
+  "harmonicDetection": {
+    "ratioTolerance": 0.08,
+    "minConfidence": 0.7,
+    "candidateStructure": {
+      "bullishSequence": [
+        "low",
+        "high",
+        "low",
+        "high",
+        "low"
+      ],
+      "bearishSequence": [
+        "high",
+        "low",
+        "high",
+        "low",
+        "high"
+      ],
+      "eachLegBarsMin": 2,
+      "eachLegBarsMax": 36,
+      "totalBarsMin": 12,
+      "totalBarsMax": 72
+    },
+    "confidenceFormula": "average fit score of XAB, ABC, BCD, XAD ratios plus 0.08 if reactionConfirmed",
+    "reactionConfirmedRule": "bullish when lastClose > D, bearish when lastClose < D",
+    "projectionModel": {
+      "prz": "Combine nearest XAD projection and nearest BCD projection around D",
+      "stopLoss": "3% of XA beyond min/max of X and PRZ boundary, mirrored by direction",
+      "target1": "D plus/minus 0.382 * AD by direction",
+      "target2": "D plus/minus 0.618 * AD by direction"
+    },
+    "patterns": {
+      "gartley": {
+        "xab": [
+          0.618,
+          0.618
+        ],
+        "abc": [
+          0.382,
+          0.886
+        ],
+        "bcd": [
+          1.13,
+          1.618
+        ],
+        "xad": [
+          0.786,
+          0.786
+        ]
+      },
+      "bat": {
+        "xab": [
+          0.382,
+          0.5
+        ],
+        "abc": [
+          0.382,
+          0.886
+        ],
+        "bcd": [
+          1.618,
+          2.618
+        ],
+        "xad": [
+          0.886,
+          0.886
+        ]
+      },
+      "butterfly": {
+        "xab": [
+          0.786,
+          0.786
+        ],
+        "abc": [
+          0.382,
+          0.886
+        ],
+        "bcd": [
+          1.618,
+          2.618
+        ],
+        "xad": [
+          1.27,
+          1.618
+        ]
+      },
+      "crab": {
+        "xab": [
+          0.382,
+          0.618
+        ],
+        "abc": [
+          0.382,
+          0.886
+        ],
+        "bcd": [
+          2.24,
+          3.618
+        ],
+        "xad": [
+          1.618,
+          1.618
+        ]
+      }
+    }
+  },
+  "chartDetailDefaults": {
+    "candleInterval": "1h",
+    "candleLimit": 72,
+    "recomputePatternsOnlyWhenClosedCandle": true,
+    "maxCandlesKeptInMemory": 72,
+    "toggleDefaults": {
+      "supportResistance": true,
+      "triangle": true,
+      "harmonic": true,
+      "reversals": true,
+      "swingPoints": true
+    }
+  },
+  "websocketDefaults": {
+    "dashboardPriceStream": "!miniTicker@arr",
+    "detailChartStreamFormat": "<symbol>@kline_1h",
+    "reconnectDelayMs": 3000
+  },
+  "backtestDefaults": {
+    "jobIntervalMinutesDefault": 60,
+    "pendingEntryBatchLimit": 150,
+    "lookupInterval": "1h",
+    "lookupCandleLimit": 100,
+    "returnCheckpointsHours": [
+      1,
+      4,
+      12,
+      24,
+      48,
+      72
+    ],
+    "reportUiDefaults": {
+      "timeframe": "1h",
+      "days": 30,
+      "dayOptions": [
+        7,
+        14,
+        30
+      ]
+    },
+    "reportTables": {
+      "patternBucketsTopN": 12,
+      "harmonicBuckets": "all grouped by harmonic family and direction",
+      "recentRowsLimit": 25
+    }
+  },
+  "supabaseCronDefaults": {
+    "scan1h": "*/5 * * * *",
+    "scan4h": "2-57/5 * * * *",
+    "backtest": "7 * * * *"
+  },
+  "environmentVariablesWithDefaults": {
+    "PORT": 8787,
+    "BINANCE_API_BASE": "https://fapi.binance.com",
+    "BINANCE_WS_BASE": "wss://fstream.binance.com",
+    "SCAN_INTERVAL_MINUTES": 5,
+    "BACKTEST_INTERVAL_MINUTES": 60,
+    "BINANCE_REQUESTS_PER_SECOND": 4,
+    "BINANCE_SYMBOL_LIMIT": null,
+    "VITE_API_TARGET": "http://localhost:8787",
+    "SUPABASE_URL": null,
+    "SUPABASE_SERVICE_ROLE_KEY": null,
+    "VITE_SUPABASE_URL": null,
+    "VITE_SUPABASE_ANON_KEY": null,
+    "SUPABASE_PROJECT_ID": null
+  }
+}

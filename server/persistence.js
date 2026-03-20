@@ -404,7 +404,7 @@ export function createPersistenceLayer() {
       return null;
     },
 
-    async buildBacktestReport({ timeframe = '1h', days = 14 }) {
+    async buildBacktestReport({ timeframe = '1h', days = 30 }) {
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
       let mergedRecords = [];
 

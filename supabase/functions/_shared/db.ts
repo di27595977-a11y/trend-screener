@@ -219,7 +219,7 @@ export async function updateBacktestEntry(admin: ReturnType<typeof createAdminCl
 
 export async function buildBacktestReport(
   admin: ReturnType<typeof createAdminClient>,
-  { timeframe = '1h', days = 14 }: { timeframe?: string; days?: number },
+  { timeframe = '1h', days = 30 }: { timeframe?: string; days?: number },
 ) {
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
   const { data: resultRows, error: resultError } = await admin
