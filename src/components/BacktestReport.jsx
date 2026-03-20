@@ -53,6 +53,19 @@ function formatPatternName(pattern) {
     );
   }
 
+  if (pattern.startsWith('harmonic:')) {
+    const [, name, direction] = pattern.split(':');
+    const baseLabel =
+      {
+        gartley: 'Gartley',
+        bat: 'Bat',
+        butterfly: 'Butterfly',
+        crab: 'Crab',
+      }[name] || name;
+    const directionLabel = direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
+    return `${baseLabel} ${directionLabel}`;
+  }
+
   if (pattern.startsWith('support:')) {
     return `\u652f\u6490 \u00d7${pattern.split(':')[1]}`;
   }

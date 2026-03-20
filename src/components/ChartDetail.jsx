@@ -24,16 +24,19 @@ const COPY = {
   insights: '\u5feb\u901f\u89c0\u5bdf',
   supportResistance: '\u652f\u6490 / \u58d3\u529b',
   triangle: '\u4e09\u89d2\u6536\u6582',
+  harmonic: '\u8ae7\u6ce2\u5f62\u614b',
   reversals: 'W / M \u53cd\u8f49',
   swingPoints: '\u8f49\u6298\u9ede',
   noLevels: '\u76ee\u524d\u6c92\u6709\u627e\u5230\u91cd\u8907\u78b0\u89f8\u7684\u95dc\u9375\u50f9\u4f4d\u3002',
   noTriangle: '\u76ee\u524d\u6c92\u6709\u660e\u986f\u7684\u6536\u6582\u4e09\u89d2\uff0c\u53ef\u4ee5\u5148\u89c0\u5bdf\u9ad8\u4f4e\u9ede\u662f\u5426\u958b\u59cb\u6536\u655b\u3002',
+  noHarmonic: '\u76ee\u524d\u6c92\u6709\u5b8c\u6574\u7684 XABCD \u8ae7\u6ce2\u7d50\u69cb\u3002',
   noReversal: '\u76ee\u524d\u6c92\u6709\u5b8c\u6574\u7684 W \u5e95\u6216 M \u9802\u7d50\u69cb\u3002',
 };
 
 const TOGGLE_OPTIONS = [
   ['supportResistance', COPY.supportResistance],
   ['triangle', COPY.triangle],
+  ['harmonic', COPY.harmonic],
   ['reversals', COPY.reversals],
   ['swingPoints', COPY.swingPoints],
 ];
@@ -126,6 +129,20 @@ function buildTriangleSummary(patterns) {
   return `\u6700\u8fd1\u7d50\u69cb\u504f\u5411 ${formatTriangleType(patterns.triangle.type)}\uff0c\u53ef\u4ee5\u89c0\u5bdf\u6536\u6582\u672b\u7aef\u662f\u5426\u51fa\u73fe\u653e\u91cf\u7a81\u7834\u3002`;
 }
 
+function buildHarmonicSummary(patterns) {
+  if (!patterns?.harmonic) {
+    return COPY.noHarmonic;
+  }
+
+  const directionLabel = patterns.harmonic.direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
+  const targetText = patterns.harmonic.targetPrice ? `\u7b2c\u4e00\u76ee\u6a19 ${formatPrice(patterns.harmonic.targetPrice)}` : '\u5148\u89c0\u5bdf PRZ \u5340\u57df\u53cd\u61c9';
+  const confirmationText = patterns.harmonic.reactionConfirmed
+    ? '\u76ee\u524d\u5df2\u7d93\u958b\u59cb\u51fa\u73fe\u53cd\u61c9\u3002'
+    : '\u76ee\u524d\u9084\u5728\u5b8c\u6210\u5340\u9644\u8fd1\uff0c\u53ef\u4ee5\u7b49\u5f85\u53cd\u8f49\u78ba\u8a8d\u3002';
+
+  return `${patterns.harmonic.label} ${directionLabel}\uff0cPRZ \u5728 ${formatPrice(patterns.harmonic.przPrice)}\uff0c${targetText}\u3002${confirmationText}`;
+}
+
 function buildReversalSummary(patterns) {
   if (patterns?.wBottom) {
     return `W \u5e95\u9818\u7dda\u5728 ${formatPrice(patterns.wBottom.necklinePrice)}\uff0c${
@@ -167,6 +184,7 @@ export default function ChartDetail() {
   const [toggles, setToggles] = useState({
     supportResistance: true,
     triangle: true,
+    harmonic: true,
     reversals: true,
     swingPoints: true,
   });
@@ -315,6 +333,7 @@ export default function ChartDetail() {
     return {
       supportResistance: toggles.supportResistance ? patterns.supportResistance : [],
       triangle: toggles.triangle ? patterns.triangle : null,
+      harmonic: toggles.harmonic ? patterns.harmonic : null,
       wBottom: toggles.reversals ? patterns.wBottom : null,
       mTop: toggles.reversals ? patterns.mTop : null,
       swingPoints: toggles.swingPoints ? patterns.swingPoints : null,
@@ -467,6 +486,10 @@ export default function ChartDetail() {
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                 <p className="font-medium text-white">{COPY.triangle}</p>
                 <p className="mt-1">{buildTriangleSummary(patterns)}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                <p className="font-medium text-white">{COPY.harmonic}</p>
+                <p className="mt-1">{buildHarmonicSummary(patterns)}</p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                 <p className="font-medium text-white">{COPY.reversals}</p>

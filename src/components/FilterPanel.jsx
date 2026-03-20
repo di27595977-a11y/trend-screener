@@ -1,5 +1,6 @@
 const PATTERN_KEYS = [
   { key: 'triangle', label: '\u4e09\u89d2\u6536\u6582' },
+  { key: 'harmonic', label: '\u8ae7\u6ce2\u5f62\u614b' },
   { key: 'wBottom', label: 'W \u5e95' },
   { key: 'mTop', label: 'M \u9802' },
 ];

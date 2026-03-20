@@ -1,3 +1,40 @@
+const HARMONIC_RATIO_TOLERANCE = 0.08;
+
+const HARMONIC_SPECS = [
+  {
+    key: 'gartley',
+    label: 'Gartley',
+    xab: [0.618, 0.618],
+    abc: [0.382, 0.886],
+    bcd: [1.13, 1.618],
+    xad: [0.786, 0.786],
+  },
+  {
+    key: 'bat',
+    label: 'Bat',
+    xab: [0.382, 0.5],
+    abc: [0.382, 0.886],
+    bcd: [1.618, 2.618],
+    xad: [0.886, 0.886],
+  },
+  {
+    key: 'butterfly',
+    label: 'Butterfly',
+    xab: [0.786, 0.786],
+    abc: [0.382, 0.886],
+    bcd: [1.618, 2.618],
+    xad: [1.27, 1.618],
+  },
+  {
+    key: 'crab',
+    label: 'Crab',
+    xab: [0.382, 0.618],
+    abc: [0.382, 0.886],
+    bcd: [2.24, 3.618],
+    xad: [1.618, 1.618],
+  },
+];
+
 export function findSwingPoints(candles, lookback = 3) {
   const swingHighs = [];
   const swingLows = [];
@@ -57,6 +94,155 @@ function clusterPoints(points, tolerance) {
   }
 
   return clusters;
+}
+
+function mergeSwingSequence(swingHighs, swingLows) {
+  const merged = [
+    ...swingHighs.map((point) => ({ ...point, type: 'high' })),
+    ...swingLows.map((point) => ({ ...point, type: 'low' })),
+  ].sort((left, right) => left.index - right.index);
+
+  const compressed = [];
+
+  merged.forEach((point) => {
+    const last = compressed.at(-1);
+
+    if (!last) {
+      compressed.push(point);
+      return;
+    }
+
+    if (point.index === last.index) {
+      if (point.type === last.type) {
+        const shouldReplace = point.type === 'high' ? point.price > last.price : point.price < last.price;
+        if (shouldReplace) {
+          compressed[compressed.length - 1] = point;
+        }
+      }
+      return;
+    }
+
+    if (point.type === last.type) {
+      const shouldReplace = point.type === 'high' ? point.price >= last.price : point.price <= last.price;
+      if (shouldReplace) {
+        compressed[compressed.length - 1] = point;
+      }
+      return;
+    }
+
+    compressed.push(point);
+  });
+
+  return compressed;
+}
+
+function isWithinRange(value, [min, max], tolerance = HARMONIC_RATIO_TOLERANCE) {
+  return value >= min - tolerance && value <= max + tolerance;
+}
+
+function scoreRangeFit(value, [min, max], tolerance = HARMONIC_RATIO_TOLERANCE) {
+  if (!isWithinRange(value, [min, max], tolerance)) {
+    return 0;
+  }
+
+  const center = (min + max) / 2;
+  const halfSpan = (max - min) / 2 + tolerance || tolerance || 1;
+  return Math.max(0, 1 - Math.abs(value - center) / halfSpan);
+}
+
+function buildHarmonicCandidate(points, candles) {
+  if (points.length !== 5) {
+    return null;
+  }
+
+  const [x, a, b, c, d] = points;
+  const direction = x.type === 'low' ? 'bullish' : x.type === 'high' ? 'bearish' : null;
+
+  if (!direction) {
+    return null;
+  }
+
+  const expectedTypes = direction === 'bullish' ? ['low', 'high', 'low', 'high', 'low'] : ['high', 'low', 'high', 'low', 'high'];
+
+  if (!points.every((point, index) => point.type === expectedTypes[index])) {
+    return null;
+  }
+
+  const legSpans = [a.index - x.index, b.index - a.index, c.index - b.index, d.index - c.index];
+  const totalSpan = d.index - x.index;
+
+  if (legSpans.some((span) => span < 2 || span > 36) || totalSpan < 12 || totalSpan > 72) {
+    return null;
+  }
+
+  if (direction === 'bullish') {
+    if (!(a.price > x.price && b.price > x.price && b.price < a.price && c.price > b.price && c.price < a.price && d.price < c.price)) {
+      return null;
+    }
+  } else if (!(a.price < x.price && b.price < x.price && b.price > a.price && c.price < b.price && c.price > a.price && d.price > c.price)) {
+    return null;
+  }
+
+  const xa = Math.abs(a.price - x.price);
+  const ab = Math.abs(b.price - a.price);
+  const bc = Math.abs(c.price - b.price);
+  const cd = Math.abs(d.price - c.price);
+  const xad = Math.abs(a.price - d.price);
+
+  if ([xa, ab, bc, cd, xad].some((value) => value === 0)) {
+    return null;
+  }
+
+  const ratios = {
+    xab: ab / xa,
+    abc: bc / ab,
+    bcd: cd / bc,
+    xad: xad / xa,
+  };
+
+  const lastClose = candles.at(-1)?.close ?? d.price;
+  const reactionConfirmed = direction === 'bullish' ? lastClose > d.price : lastClose < d.price;
+  const candidates = [];
+
+  HARMONIC_SPECS.forEach((spec) => {
+    if (
+      !isWithinRange(ratios.xab, spec.xab) ||
+      !isWithinRange(ratios.abc, spec.abc) ||
+      !isWithinRange(ratios.bcd, spec.bcd) ||
+      !isWithinRange(ratios.xad, spec.xad)
+    ) {
+      return;
+    }
+
+    const fitScore =
+      (scoreRangeFit(ratios.xab, spec.xab) +
+        scoreRangeFit(ratios.abc, spec.abc) +
+        scoreRangeFit(ratios.bcd, spec.bcd) +
+        scoreRangeFit(ratios.xad, spec.xad)) /
+      4;
+
+    candidates.push({
+      type: 'harmonic',
+      key: spec.key,
+      label: spec.label,
+      direction,
+      x,
+      a,
+      b,
+      c,
+      d,
+      ratios,
+      confidence: fitScore + (reactionConfirmed ? 0.08 : 0),
+      reactionConfirmed,
+      przPrice: d.price,
+      targetPrice:
+        direction === 'bullish'
+          ? d.price + Math.abs(a.price - d.price) * 0.382
+          : d.price - Math.abs(a.price - d.price) * 0.382,
+    });
+  });
+
+  return candidates.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
 export function detectSupportResistance(swingHighs, swingLows, tolerance = 0.005) {
@@ -232,6 +418,29 @@ export function detectMTop(swingHighs, swingLows, candles, tolerance = 0.02) {
   return patterns.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
+export function detectHarmonicPattern(swingHighs, swingLows, candles) {
+  const mergedSwings = mergeSwingSequence(swingHighs, swingLows);
+  const candidates = [];
+
+  for (let index = 0; index <= mergedSwings.length - 5; index += 1) {
+    const candidate = buildHarmonicCandidate(mergedSwings.slice(index, index + 5), candles);
+
+    if (candidate) {
+      candidates.push(candidate);
+    }
+  }
+
+  return (
+    candidates.sort((left, right) => {
+      if (right.confidence !== left.confidence) {
+        return right.confidence - left.confidence;
+      }
+
+      return (right.d?.index ?? 0) - (left.d?.index ?? 0);
+    })[0] ?? null
+  );
+}
+
 export function detectAllPatterns(candles, options = {}) {
   const lookback = options.lookback ?? 3;
   const tolerance = options.tolerance ?? 0.005;
@@ -241,6 +450,7 @@ export function detectAllPatterns(candles, options = {}) {
   return {
     supportResistance: detectSupportResistance(swingHighs, swingLows, tolerance),
     triangle: detectTriangle(swingHighs, swingLows, candles.length),
+    harmonic: detectHarmonicPattern(swingHighs, swingLows, candles),
     wBottom: detectWBottom(swingHighs, swingLows, candles, reversalTolerance),
     mTop: detectMTop(swingHighs, swingLows, candles, reversalTolerance),
     swingPoints: { swingHighs, swingLows },
@@ -256,6 +466,10 @@ export function summarizePatterns(patterns) {
 
   if (patterns.triangle) {
     summary.push(`triangle:${patterns.triangle.type}`);
+  }
+
+  if (patterns.harmonic) {
+    summary.push(`harmonic:${patterns.harmonic.key}:${patterns.harmonic.direction}`);
   }
 
   if (patterns.wBottom) {

@@ -14,6 +14,10 @@ function filterResults(results: any[], minScore: number, patterns: string[]) {
         return result.detectedPatterns.some((item: string) => item.startsWith('triangle:'));
       }
 
+      if (pattern === 'harmonic') {
+        return result.detectedPatterns.some((item: string) => item.startsWith('harmonic:'));
+      }
+
       return result.detectedPatterns.includes(pattern);
     });
   });

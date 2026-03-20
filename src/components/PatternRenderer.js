@@ -118,7 +118,7 @@ class PatternRenderer {
     const width = this.canvas.width / ratio;
     const height = this.canvas.height / ratio;
     const ctx = this.ctx;
-    const { supportResistance, triangle, wBottom, mTop, swingPoints } = this.patterns;
+    const { supportResistance, triangle, harmonic, wBottom, mTop, swingPoints } = this.patterns;
 
     ctx.clearRect(0, 0, width, height);
 
@@ -203,6 +203,70 @@ class PatternRenderer {
 
       if (anchor.x != null && anchor.y != null) {
         this.drawText(label, anchor.x, anchor.y - 14, '#fde047');
+      }
+    }
+
+    if (harmonic) {
+      const color = harmonic.direction === 'bullish' ? '#38bdf8' : '#fb923c';
+      const guideColor = harmonic.direction === 'bullish' ? '#38bdf888' : '#fb923c88';
+      const targetColor = harmonic.direction === 'bullish' ? '#7dd3fc88' : '#fdba7488';
+      const directionLabel = harmonic.direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
+      const points = [
+        ['X', harmonic.x],
+        ['A', harmonic.a],
+        ['B', harmonic.b],
+        ['C', harmonic.c],
+        ['D', harmonic.d],
+      ];
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      points.forEach(([, point], index) => {
+        const position = this.tp(point.time, point.price);
+
+        if (position.x == null || position.y == null) {
+          return;
+        }
+
+        if (index === 0) {
+          ctx.moveTo(position.x, position.y);
+        } else {
+          ctx.lineTo(position.x, position.y);
+        }
+      });
+
+      ctx.stroke();
+
+      points.forEach(([label, point], index) => {
+        const position = this.tp(point.time, point.price);
+
+        if (position.x == null || position.y == null) {
+          return;
+        }
+
+        ctx.beginPath();
+        ctx.fillStyle = color;
+        ctx.arc(position.x, position.y, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        this.drawText(label, position.x + 6, position.y + (index % 2 === 0 ? -8 : 14), color);
+      });
+
+      const anchor = this.tp(harmonic.d.time, harmonic.d.price);
+      if (anchor.x != null && anchor.y != null) {
+        this.drawText(`${harmonic.label} ${directionLabel}`, anchor.x + 10, anchor.y + (harmonic.direction === 'bullish' ? 18 : -14), color);
+      }
+
+      this.drawGuideLine(harmonic.przPrice, guideColor, `PRZ ${harmonic.przPrice.toPrecision(6)}`, harmonic.direction === 'bullish' ? 14 : -6);
+
+      if (harmonic.reactionConfirmed && harmonic.targetPrice) {
+        this.drawGuideLine(
+          harmonic.targetPrice,
+          targetColor,
+          `\u76ee\u6a19 ${harmonic.targetPrice.toPrecision(6)}`,
+          harmonic.direction === 'bullish' ? -6 : 14,
+        );
       }
     }
 

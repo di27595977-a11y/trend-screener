@@ -2,6 +2,7 @@ const PATTERN_STYLE = {
   support: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
   resistance: 'border-rose-400/30 bg-rose-400/10 text-rose-100',
   triangle: 'border-amber-400/30 bg-amber-400/10 text-amber-100',
+  harmonic: 'border-sky-400/30 bg-sky-400/10 text-sky-100',
   w_bottom: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-50',
   m_top: 'border-rose-300/30 bg-rose-300/10 text-rose-50',
   neutral: 'border-slate-400/25 bg-slate-400/10 text-slate-200',
@@ -18,6 +19,20 @@ function parsePatternName(rawPattern) {
       }[type] || '\u4e09\u89d2\u6536\u6582';
 
     return { key: rawPattern, label, tone: 'triangle' };
+  }
+
+  if (rawPattern.startsWith('harmonic:')) {
+    const [, name, direction] = rawPattern.split(':');
+    const baseLabel =
+      {
+        gartley: 'Gartley',
+        bat: 'Bat',
+        butterfly: 'Butterfly',
+        crab: 'Crab',
+      }[name] || name;
+    const directionLabel = direction === 'bullish' ? '\u725b\u8ae7\u6ce2' : '\u718a\u8ae7\u6ce2';
+
+    return { key: rawPattern, label: `${baseLabel} ${directionLabel}`, tone: 'harmonic' };
   }
 
   if (rawPattern === 'w_bottom') {
@@ -50,6 +65,10 @@ function fromPatternObject(patterns) {
 
   if (patterns?.triangle) {
     values.push(`triangle:${patterns.triangle.type}`);
+  }
+
+  if (patterns?.harmonic) {
+    values.push(`harmonic:${patterns.harmonic.key}:${patterns.harmonic.direction}`);
   }
 
   if (patterns?.wBottom) {

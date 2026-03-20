@@ -129,6 +129,10 @@ function filterResults(results, minScore, patterns) {
         return result.detectedPatterns.some((item) => item.startsWith('triangle:'));
       }
 
+      if (pattern === 'harmonic') {
+        return result.detectedPatterns.some((item) => item.startsWith('harmonic:'));
+      }
+
       return result.detectedPatterns.includes(pattern);
     });
   });

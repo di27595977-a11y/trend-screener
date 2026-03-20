@@ -12,6 +12,7 @@ const DEFAULT_FILTERS = {
   search: '',
   patterns: {
     triangle: false,
+    harmonic: false,
     wBottom: false,
     mTop: false,
   },
@@ -30,6 +31,10 @@ function toPatternFilterList(patterns) {
 
   if (patterns.triangle) {
     entries.push('triangle');
+  }
+
+  if (patterns.harmonic) {
+    entries.push('harmonic');
   }
 
   if (patterns.wBottom) {
