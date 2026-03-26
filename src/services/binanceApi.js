@@ -166,6 +166,8 @@ export async function getBacktestReport({ timeframe = '1h', days = 30 } = {}) {
 }
 
 export async function getWinRate(symbol, hours) {
+  const data = await invokeTrendApi('winrate', { symbol: symbol.toUpperCase(), hours });
+  if (data) return data;
   return requestJson(`/winrate/${encodeURIComponent(symbol.toUpperCase())}?hours=${hours}`);
 }
 

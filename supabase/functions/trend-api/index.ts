@@ -171,6 +171,90 @@ Deno.serve(async (request) => {
       return json(await runBacktest(admin));
     }
 
+    if (action === 'winrate') {
+      const symbol = (body.symbol || '').toUpperCase();
+      const hours  = Math.max(1, Math.min(168, Number(body.hours) || 4));
+      const limit  = Math.min(1000, 90 * 24);
+
+      if (!symbol) return json({ error: 'symbol required' }, { status: 400 });
+
+      const [candles, fundingRaw] = await Promise.all([
+        fetchCandles(symbol, '1h', limit),
+        requestBinance('/fapi/v1/fundingRate', { symbol, limit: 500 }).catch(() => []),
+      ]);
+
+      if (candles.length < hours + 10) {
+        return json({ error: '歷史資料不足，無法計算' }, { status: 400 });
+      }
+
+      const fundingMap = new Map<number, number>();
+      for (const f of (fundingRaw as any[])) {
+        const hourTs = Math.floor(Number(f.fundingTime) / 3_600_000) * 3_600_000;
+        fundingMap.set(hourTs, Number(f.fundingRate));
+      }
+
+      const currentFunding = fundingMap.size > 0
+        ? [...fundingMap.entries()].sort((a, b) => b[0] - a[0])[0]?.[1] ?? null
+        : null;
+
+      const stats = {
+        all:      { wins: 0, total: 0, gain: 0, loss: 0, gainN: 0, lossN: 0, maxG: -Infinity, maxL: -Infinity },
+        fundPos:  { wins: 0, total: 0 },
+        fundNeg:  { wins: 0, total: 0 },
+        fundHigh: { wins: 0, total: 0 },
+        fundLow:  { wins: 0, total: 0 },
+      };
+
+      for (let i = 0; i < candles.length - hours; i++) {
+        const entry = candles[i].close;
+        const exit  = candles[i + hours].close;
+        const ret   = (exit - entry) / entry;
+        const win   = ret > 0;
+        const hourTs = Math.floor(candles[i].time * 1000 / 3_600_000) * 3_600_000;
+
+        const s = stats.all;
+        s.total++;
+        if (win) { s.wins++; s.gain += ret; s.gainN++; s.maxG = Math.max(s.maxG, ret); }
+        else     { s.loss += Math.abs(ret); s.lossN++; s.maxL = Math.max(s.maxL, Math.abs(ret)); }
+
+        let fr: number | null = null;
+        for (let lb = 0; lb <= 8; lb++) {
+          const ts = hourTs - lb * 3_600_000;
+          if (fundingMap.has(ts)) { fr = fundingMap.get(ts)!; break; }
+        }
+        if (fr !== null) {
+          if (fr > 0)       { stats.fundPos.total++;  if (win) stats.fundPos.wins++;  }
+          if (fr < 0)       { stats.fundNeg.total++;  if (win) stats.fundNeg.wins++;  }
+          if (fr > 0.0005)  { stats.fundHigh.total++; if (win) stats.fundHigh.wins++; }
+          if (fr < -0.0001) { stats.fundLow.total++;  if (win) stats.fundLow.wins++;  }
+        }
+      }
+
+      const s = stats.all;
+      const winRate       = s.wins / s.total;
+      const avgGain       = s.gainN > 0 ? s.gain / s.gainN : 0;
+      const avgLoss       = s.lossN > 0 ? s.loss / s.lossN : 0;
+      const expectedValue = winRate * avgGain - (1 - winRate) * avgLoss;
+      const wr = (st: { wins: number; total: number }) => st.total >= 10 ? st.wins / st.total : null;
+
+      return json({
+        symbol, hours, winRate,
+        sampleCount: s.total,
+        avgGain, avgLoss, expectedValue,
+        maxGain: s.maxG === -Infinity ? 0 : s.maxG,
+        maxLoss: s.maxL === -Infinity ? 0 : s.maxL,
+        currentPrice: candles[candles.length - 1].close,
+        currentFunding,
+        funding: {
+          positive:    { winRate: wr(stats.fundPos),  sampleCount: stats.fundPos.total  },
+          negative:    { winRate: wr(stats.fundNeg),  sampleCount: stats.fundNeg.total  },
+          extremeHigh: { winRate: wr(stats.fundHigh), sampleCount: stats.fundHigh.total },
+          extremeLow:  { winRate: wr(stats.fundLow),  sampleCount: stats.fundLow.total  },
+        },
+        mlScore: null, mlDirection: null, mlProb: null,
+      });
+    }
+
     return json({ error: `Unknown action: ${action}` }, { status: 400 });
   } catch (error) {
     return json({ error: serializeError(error) }, { status: 500 });
