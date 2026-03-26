@@ -104,12 +104,10 @@ export default function WinRateCalculator() {
   const [error,  setError]  = useState(null);
 
   async function handleCalculate() {
-    const sym = symbol.trim().toUpperCase();
+    let sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    if (!sym.endsWith('USDT')) {
-      setError('請輸入完整幣種名稱，例如：BTCUSDT');
-      return;
-    }
+    // 自動補 USDT
+    if (!sym.endsWith('USDT')) sym = sym + 'USDT';
     setLoading(true);
     setError(null);
     setResult(null);
@@ -147,7 +145,7 @@ export default function WinRateCalculator() {
             value={symbol}
             onChange={(e) => setSymbol(e.target.value.toUpperCase())}
             onKeyDown={handleKeyDown}
-            placeholder="輸入幣種，例如 BTCUSDT"
+            placeholder="輸入幣種，例如 BTC 或 BTCUSDT"
             className="flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 font-mono text-sm text-white placeholder-slate-500 outline-none focus:border-emerald-400/50 focus:bg-white/8"
           />
           <button
