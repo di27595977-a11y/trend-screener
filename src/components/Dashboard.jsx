@@ -5,6 +5,7 @@ import StrategySettingsPanel from './StrategySettingsPanel';
 import SymbolLookupPanel from './SymbolLookupPanel';
 import StatusBar from './StatusBar';
 import CoinTable from './CoinTable';
+import MlStatusPanel from './MlStatusPanel';
 import { loadDashboardSnapshot, triggerScan } from '../services/scanner';
 import { getRuntimeSettings, updateRuntimeSettings } from '../services/binanceApi';
 import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings.js';
@@ -404,6 +405,8 @@ export default function Dashboard() {
           onRefresh={handleRefresh}
           refreshing={refreshing}
         />
+
+        <MlStatusPanel />
 
         <SymbolLookupPanel
           settings={strategySettings}

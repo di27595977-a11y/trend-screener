@@ -5,8 +5,12 @@ import { SCAN_TIMEFRAME_CONFIG, buildSparkline, evaluateTrend, normalizeTradeBia
 import { detectAllPatterns, summarizePatterns } from '../src/services/patternDetection.js';
 import { calculateTrendScore } from '../src/utils/scoring.js';
 import { createPersistenceLayer } from './persistence.js';
+import { loadModel, isModelReady, predictSymbol } from './ml/predict.js';
 
 dotenv.config();
+
+const ENABLE_ML = process.env.ENABLE_ML === 'true';
+const ML_TOP_N  = Math.max(Number.parseInt(process.env.ML_TOP_N || '20', 10), 1);
 
 const API_BASE = process.env.BINANCE_API_BASE || 'https://fapi.binance.com';
 const REQUESTS_PER_SECOND = Math.max(Number.parseInt(process.env.BINANCE_REQUESTS_PER_SECOND || '4', 10), 1);
@@ -207,6 +211,7 @@ export class ScanJob {
     this.symbolsFetchedAt = 0;
     this.cache = new Map();
     this.timer = null;
+    this.mlReady = false;
     this.status = {
       isScanning: false,
       activeTimeframe: null,
@@ -243,6 +248,14 @@ export class ScanJob {
   start() {
     if (this.timer) {
       return;
+    }
+
+    if (ENABLE_ML) {
+      loadModel().then((ready) => {
+        this.mlReady = ready;
+        if (ready) this.logger.log('[ML] Model loaded and ready for inference.');
+        else this.logger.warn('[ML] ENABLE_ML=true but model not found. Train the model first.');
+      });
     }
 
     this.refreshAll().catch((error) => {
@@ -399,6 +412,30 @@ export class ScanJob {
     this.status.activeMode = 'trend';
     this.status.activeBias = 'long';
     this.status.progress = { completed: symbols.length, total: symbols.length, percent: 100 };
+
+    // ML inference on top results
+    if (ENABLE_ML && this.mlReady && isModelReady()) {
+      const topSymbols = results.slice(0, ML_TOP_N).map((r) => r.symbol);
+      const mlMap = new Map();
+      for (const sym of topSymbols) {
+        try {
+          const pred = await predictSymbol(sym);
+          if (pred) mlMap.set(sym, pred);
+        } catch {
+          // non-critical: skip on error
+        }
+        await sleep(Math.ceil(1000 / this.requestsPerSecond));
+      }
+      // Merge ML scores into results
+      for (const result of results) {
+        const pred = mlMap.get(result.symbol);
+        if (pred) {
+          result.mlScore     = pred.ml_score;
+          result.mlDirection = pred.ml_direction;
+          result.mlProb      = pred.ml_probability;
+        }
+      }
+    }
 
     await this.persistence?.recordScan({
       timeframe,

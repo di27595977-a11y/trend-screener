@@ -13,10 +13,15 @@
     "preview": "vite preview",
     "scan": "node server/scanJob.js",
     "backtest": "node server/backtestJob.js",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "ml:collect": "node server/ml/dataPipeline.js --collect",
+    "ml:collect:days": "node server/ml/dataPipeline.js --collect --days",
+    "ml:backfill": "node server/ml/labels.js --backfill",
+    "ml:train": "node server/ml/train.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.84.0",
+    "@tensorflow/tfjs": "^4.22.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",

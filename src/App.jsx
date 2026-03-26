@@ -3,6 +3,7 @@ import Dashboard from './components/Dashboard';
 import ChartDetail from './components/ChartDetail';
 import BacktestReport from './components/BacktestReport';
 import AlphaSignals from './components/AlphaSignals';
+import WinRateCalculator from './components/WinRateCalculator';
 
 const COPY = {
   eyebrow: '趨勢篩選器',
@@ -12,6 +13,7 @@ const COPY = {
   dashboard: '儀表板',
   backtest: '回測報告',
   alpha: '即時訊號',
+  winrate: '勝率計算',
 };
 
 function AppNavLink({ to, children, end = false }) {
@@ -47,12 +49,13 @@ function AppShell({ children }) {
             <p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">{COPY.description}</p>
           </div>
 
-          <nav className="grid grid-cols-3 gap-3 sm:flex sm:flex-wrap">
+          <nav className="grid grid-cols-4 gap-3 sm:flex sm:flex-wrap">
             <AppNavLink end to="/">
               {COPY.dashboard}
             </AppNavLink>
             <AppNavLink to="/backtest">{COPY.backtest}</AppNavLink>
             <AppNavLink to="/alpha">{COPY.alpha}</AppNavLink>
+            <AppNavLink to="/winrate">{COPY.winrate}</AppNavLink>
           </nav>
         </header>
 
@@ -70,6 +73,7 @@ export default function App() {
         <Route path="/chart/:symbol" element={<ChartDetail />} />
         <Route path="/backtest" element={<BacktestReport />} />
         <Route path="/alpha" element={<AlphaSignals />} />
+        <Route path="/winrate" element={<WinRateCalculator />} />
       </Routes>
     </AppShell>
   );

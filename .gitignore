@@ -15,6 +15,11 @@ dist-ssr
 .env.*
 .vercel
 
+# ML model artifacts (large binary files)
+server/ml/saved_model/
+server/ml/scaler.json
+server/ml/model_metrics.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

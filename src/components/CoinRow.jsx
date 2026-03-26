@@ -5,6 +5,19 @@ import TradeSignalBadge from './TradeSignalBadge';
 import { generateTradeAdvice } from '../lib/tradeAdvisor';
 import { buildFallbackLevels, formatNumber, formatPrice, parsePatternSummary } from './coinDisplayUtils';
 
+function MlScoreBadge({ score, direction }) {
+  if (score == null) {
+    return <span className="font-mono text-xs text-slate-500">—</span>;
+  }
+  const arrow = direction === 1 ? '↑' : direction === -1 ? '↓' : '→';
+  const tone  = direction === 1 ? 'text-emerald-300' : direction === -1 ? 'text-rose-300' : 'text-slate-300';
+  return (
+    <span className={`font-mono text-sm ${tone}`}>
+      {arrow} {score}
+    </span>
+  );
+}
+
 export default function CoinRow({ coin, livePrice, onSelect }) {
   const currentPrice = livePrice?.price ?? coin.currentPrice ?? coin.entryPrice;
   const liveChange = livePrice?.change24h ?? coin.priceChangePct;
@@ -49,6 +62,9 @@ export default function CoinRow({ coin, livePrice, onSelect }) {
       </td>
       <td className="px-4 py-4">
         <TradeSignalBadge direction={advice.direction} confidence={advice.confidence} />
+      </td>
+      <td className="px-4 py-4">
+        <MlScoreBadge score={coin.mlScore} direction={coin.mlDirection} />
       </td>
       <td className="px-4 py-4">
         <Sparkline values={coin.sparkline} />

@@ -165,6 +165,21 @@ export async function getBacktestReport({ timeframe = '1h', days = 30 } = {}) {
   return requestJson(`/backtest/report?${params.toString()}`);
 }
 
+export async function getWinRate(symbol, hours) {
+  return requestJson(`/winrate/${encodeURIComponent(symbol.toUpperCase())}?hours=${hours}`);
+}
+
+export async function getMlStatus() {
+  return requestJson('/ml/status');
+}
+
+export async function triggerMlTrain({ epochs = 50, batchSize = 256 } = {}) {
+  return requestJson('/ml/train', {
+    method: 'POST',
+    body: JSON.stringify({ epochs, batchSize }),
+  });
+}
+
 export function buildBinanceChartUrl(symbol) {
   return `https://www.binance.com/en/futures/${symbol}`;
 }
