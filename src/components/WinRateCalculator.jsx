@@ -24,19 +24,17 @@ function formatPrice(v) {
   return v.toFixed(6);
 }
 
-function WinRateGauge({ rate }) {
+function WinRateGauge({ rate, label: sideLabel, color }) {
   const deg = rate != null ? rate * 180 : 0;
-  const tone = rate >= 0.55 ? '#34d399' : rate >= 0.45 ? '#fbbf24' : '#f87171';
+  const tone = color || (rate >= 0.55 ? '#34d399' : rate >= 0.45 ? '#fbbf24' : '#f87171');
   const label = rate >= 0.55 ? '偏多' : rate >= 0.45 ? '中性' : '偏空';
   return (
-    <div className="flex flex-col items-center gap-3">
-      {/* Semi-circle gauge */}
-      <div className="relative h-32 w-64 overflow-hidden">
-        {/* Track */}
-        <div className="absolute bottom-0 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full border-[18px] border-white/8" />
-        {/* Fill — rotated conic-gradient approximation via transform */}
+    <div className="flex flex-col items-center gap-1">
+      {sideLabel && <p className="text-xs font-medium text-slate-400">{sideLabel}</p>}
+      <div className="relative h-24 w-48 overflow-hidden">
+        <div className="absolute bottom-0 left-1/2 h-48 w-48 -translate-x-1/2 rounded-full border-[14px] border-white/8" />
         <div
-          className="absolute bottom-0 left-1/2 h-64 w-64 -translate-x-1/2 rounded-full border-[18px] transition-all duration-700"
+          className="absolute bottom-0 left-1/2 h-48 w-48 -translate-x-1/2 rounded-full border-[14px] transition-all duration-700"
           style={{
             borderColor: 'transparent',
             borderTopColor: tone,
@@ -45,12 +43,11 @@ function WinRateGauge({ rate }) {
             transformOrigin: '50% 50%',
           }}
         />
-        {/* Center text */}
-        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-2 text-center">
-          <p className="font-mono text-4xl font-bold" style={{ color: tone }}>
+        <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1 text-center">
+          <p className="font-mono text-2xl font-bold" style={{ color: tone }}>
             {rate != null ? `${(rate * 100).toFixed(1)}%` : '--'}
           </p>
-          <p className="text-xs text-slate-400">{label}</p>
+          <p className="text-[10px] text-slate-400">{label}</p>
         </div>
       </div>
     </div>
@@ -66,10 +63,66 @@ function StatCard({ label, value, sub, tone = 'slate' }) {
     slate:   'border-white/10       bg-white/4        text-slate-200',
   };
   return (
-    <div className={`rounded-2xl border px-4 py-4 ${tones[tone]}`}>
-      <p className="text-[11px] uppercase tracking-[0.24em] text-slate-400">{label}</p>
-      <p className={`mt-2 font-mono text-lg font-semibold ${tones[tone].split(' ')[2]}`}>{value}</p>
-      {sub && <p className="mt-1 text-xs text-slate-400">{sub}</p>}
+    <div className={`rounded-2xl border px-3 py-3 ${tones[tone]}`}>
+      <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400">{label}</p>
+      <p className={`mt-1.5 font-mono text-base font-semibold ${tones[tone].split(' ')[2]}`}>{value}</p>
+      {sub && <p className="mt-0.5 text-[10px] text-slate-400">{sub}</p>}
+    </div>
+  );
+}
+
+function SidePanel({ side, data, sampleCount }) {
+  const isLong = side === 'long';
+  const icon = isLong ? '📈' : '📉';
+  const title = isLong ? '做多（Long）' : '做空（Short）';
+  const borderColor = isLong ? 'border-emerald-400/20' : 'border-rose-400/20';
+  const bgColor = isLong ? 'bg-emerald-400/5' : 'bg-rose-400/5';
+  const gaugeColor = isLong ? '#34d399' : '#f87171';
+
+  const ev = data?.expectedValue;
+  const evTone = ev == null ? 'slate' : ev > 0 ? 'emerald' : 'rose';
+
+  return (
+    <div className={`rounded-2xl border ${borderColor} ${bgColor} px-4 py-4`}>
+      <p className="mb-3 text-sm font-medium text-white">{icon} {title}</p>
+      <WinRateGauge rate={data?.winRate} color={gaugeColor} />
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <StatCard
+          label="勝率"
+          value={pct(data?.winRate)}
+          sub={`${sampleCount} 樣本`}
+          tone={data?.winRate >= 0.55 ? 'emerald' : data?.winRate >= 0.45 ? 'amber' : 'rose'}
+        />
+        <StatCard
+          label="期望值"
+          value={pct(ev)}
+          sub={ev > 0 ? '正期望' : '負期望'}
+          tone={evTone}
+        />
+        <StatCard
+          label="平均獲利"
+          value={`+${pct(data?.avgGain)}`}
+          sub={`最高 +${pct(data?.maxGain)}`}
+          tone="emerald"
+        />
+        <StatCard
+          label="平均虧損"
+          value={`-${pct(data?.avgLoss)}`}
+          sub={`最大 -${pct(data?.maxLoss)}`}
+          tone="rose"
+        />
+      </div>
+      {/* Profit factor */}
+      <div className="mt-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-slate-400">獲利因子</span>
+          <span className="font-mono text-white">
+            {data?.avgLoss > 0
+              ? ((data.winRate * data.avgGain) / ((1 - data.winRate) * data.avgLoss)).toFixed(2)
+              : '∞'}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -106,7 +159,6 @@ export default function WinRateCalculator() {
   async function handleCalculate() {
     let sym = symbol.trim().toUpperCase();
     if (!sym) return;
-    // 自動補 USDT
     if (!sym.endsWith('USDT')) sym = sym + 'USDT';
     setLoading(true);
     setError(null);
@@ -125,17 +177,17 @@ export default function WinRateCalculator() {
     if (e.key === 'Enter') handleCalculate();
   }
 
-  const ev = result?.expectedValue;
-  const evTone = ev == null ? 'slate' : ev > 0 ? 'emerald' : 'rose';
+  // Support both new (long/short) and old (flat) response formats
+  const longData  = result?.long  || result;
+  const shortData = result?.short || null;
 
   return (
     <div className="mx-auto max-w-2xl">
       <section className="panel rounded-[28px] px-5 py-6">
-        {/* Header */}
         <p className="font-mono text-xs uppercase tracking-[0.35em] text-emerald-300/75">勝率計算機</p>
         <h2 className="mt-2 text-xl font-semibold text-white">持倉勝率分析</h2>
         <p className="mt-1 text-sm text-slate-400">
-          根據近 90 天歷史數據，計算在指定持有時間內出現正收益的機率。
+          根據近 90 天歷史數據，分別計算做多與做空在指定持有時間內的勝率與期望值。
         </p>
 
         {/* Input Row */}
@@ -196,56 +248,51 @@ export default function WinRateCalculator() {
             <span className="font-mono text-lg text-slate-200">${formatPrice(result.currentPrice)}</span>
           </div>
 
-          {/* Gauge */}
-          <WinRateGauge rate={result.winRate} />
-
-          {/* Stats Grid */}
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard
-              label="歷史勝率"
-              value={pct(result.winRate)}
-              sub={`${result.sampleCount} 樣本`}
-              tone={result.winRate >= 0.55 ? 'emerald' : result.winRate >= 0.45 ? 'amber' : 'rose'}
-            />
-            <StatCard
-              label="期望值"
-              value={pct(result.expectedValue)}
-              sub={ev > 0 ? '正期望' : '負期望'}
-              tone={evTone}
-            />
-            <StatCard
-              label="平均獲利"
-              value={`+${pct(result.avgGain)}`}
-              sub={`最高 +${pct(result.maxGain)}`}
-              tone="emerald"
-            />
-            <StatCard
-              label="平均虧損"
-              value={`-${pct(result.avgLoss)}`}
-              sub={`最大 -${pct(result.maxLoss)}`}
-              tone="rose"
-            />
+          {/* Long vs Short side-by-side */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <SidePanel side="long" data={longData} sampleCount={longData?.sampleCount} />
+            {shortData && (
+              <SidePanel side="short" data={shortData} sampleCount={shortData?.sampleCount} />
+            )}
           </div>
 
-          {/* Profit factor */}
-          <div className="mt-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-400">獲利因子（Profit Factor）</span>
-              <span className="font-mono text-white">
-                {result.avgLoss > 0
-                  ? ((result.winRate * result.avgGain) / ((1 - result.winRate) * result.avgLoss)).toFixed(2)
-                  : '∞'}
-              </span>
+          {/* Quick comparison bar */}
+          {shortData && (
+            <div className="mt-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+              <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-slate-400">做多 vs 做空 快速比較</p>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-emerald-300">做多 {pct(longData?.winRate)}</span>
+                  <div className="mx-3 flex-1">
+                    <div className="relative h-2 rounded-full bg-white/8 overflow-hidden">
+                      <div
+                        className="absolute left-0 top-0 h-full rounded-full bg-emerald-400/60 transition-all duration-500"
+                        style={{ width: `${(longData?.winRate || 0) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                  <span className="text-rose-300">{pct(shortData?.winRate)} 做空</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-emerald-300">EV {pct(longData?.expectedValue)}</span>
+                  <span className="text-xs text-slate-500">期望值</span>
+                  <span className="text-rose-300">EV {pct(shortData?.expectedValue)}</span>
+                </div>
+                {longData?.expectedValue != null && shortData?.expectedValue != null && (
+                  <p className="text-center text-xs font-medium" style={{
+                    color: longData.expectedValue > shortData.expectedValue ? '#34d399' :
+                           shortData.expectedValue > longData.expectedValue ? '#f87171' : '#94a3b8'
+                  }}>
+                    {longData.expectedValue > shortData.expectedValue
+                      ? '⬆ 做多期望值較高'
+                      : shortData.expectedValue > longData.expectedValue
+                      ? '⬇ 做空期望值較高'
+                      : '⚖ 多空期望值相當'}
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="mt-2 flex items-center justify-between text-sm">
-              <span className="text-slate-400">勝率所需最低值（損益比 {result.avgGain > 0 && result.avgLoss > 0 ? (result.avgGain / result.avgLoss).toFixed(2) : '--'}x）</span>
-              <span className="font-mono text-white">
-                {result.avgGain > 0 && result.avgLoss > 0
-                  ? pct(result.avgLoss / (result.avgGain + result.avgLoss))
-                  : '--'}
-              </span>
-            </div>
-          </div>
+          )}
 
           {/* Funding Rate Analysis */}
           {result.funding && (
@@ -266,19 +313,28 @@ export default function WinRateCalculator() {
                   { label: '費率 < -0.01%（負費率）', key: 'extremeLow',  hint: '超賣機會' },
                 ].map(({ label, key, hint }) => {
                   const d  = result.funding[key];
-                  const wr = d?.winRate;
+                  const longWr  = d?.long;
+                  const shortWr = d?.short;
                   const n  = d?.sampleCount ?? 0;
-                  const tone = wr == null ? 'text-slate-500'
-                    : wr >= 0.55 ? 'text-emerald-300'
-                    : wr >= 0.45 ? 'text-amber-300'
-                    : 'text-rose-300';
                   return (
                     <div key={key} className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
                       <p className="text-[10px] text-slate-400">{label}</p>
-                      <p className={`mt-1 font-mono text-base font-semibold ${tone}`}>
-                        {wr != null ? `${(wr * 100).toFixed(1)}%` : '--'}
-                      </p>
-                      <p className="text-[10px] text-slate-500">
+                      <div className="mt-1 flex items-center gap-3">
+                        <div>
+                          <p className="text-[9px] text-emerald-400/70">做多</p>
+                          <p className={`font-mono text-sm font-semibold ${longWr == null ? 'text-slate-500' : longWr >= 0.55 ? 'text-emerald-300' : longWr >= 0.45 ? 'text-amber-300' : 'text-rose-300'}`}>
+                            {longWr != null ? `${(longWr * 100).toFixed(1)}%` : '--'}
+                          </p>
+                        </div>
+                        <div className="h-6 w-px bg-white/10" />
+                        <div>
+                          <p className="text-[9px] text-rose-400/70">做空</p>
+                          <p className={`font-mono text-sm font-semibold ${shortWr == null ? 'text-slate-500' : shortWr >= 0.55 ? 'text-emerald-300' : shortWr >= 0.45 ? 'text-amber-300' : 'text-rose-300'}`}>
+                            {shortWr != null ? `${(shortWr * 100).toFixed(1)}%` : '--'}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-1 text-[10px] text-slate-500">
                         {n >= 10 ? `${n} 樣本・${hint}` : n > 0 ? `${n} 樣本（不足）` : '無資料'}
                       </p>
                     </div>

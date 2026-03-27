@@ -197,59 +197,83 @@ Deno.serve(async (request) => {
         ? [...fundingMap.entries()].sort((a, b) => b[0] - a[0])[0]?.[1] ?? null
         : null;
 
+      const mkSide = () => ({ wins: 0, total: 0, gain: 0, loss: 0, gainN: 0, lossN: 0, maxG: -Infinity, maxL: -Infinity });
       const stats = {
-        all:      { wins: 0, total: 0, gain: 0, loss: 0, gainN: 0, lossN: 0, maxG: -Infinity, maxL: -Infinity },
-        fundPos:  { wins: 0, total: 0 },
-        fundNeg:  { wins: 0, total: 0 },
-        fundHigh: { wins: 0, total: 0 },
-        fundLow:  { wins: 0, total: 0 },
+        long:  mkSide(),
+        short: mkSide(),
+        fundPos:  { longWin: 0, shortWin: 0, total: 0 },
+        fundNeg:  { longWin: 0, shortWin: 0, total: 0 },
+        fundHigh: { longWin: 0, shortWin: 0, total: 0 },
+        fundLow:  { longWin: 0, shortWin: 0, total: 0 },
       };
 
       for (let i = 0; i < candles.length - hours; i++) {
         const entry = candles[i].close;
         const exit  = candles[i + hours].close;
         const ret   = (exit - entry) / entry;
-        const win   = ret > 0;
+        const longWin  = ret > 0;   // 做多：漲了就贏
+        const shortWin = ret < 0;   // 做空：跌了就贏
         const hourTs = Math.floor(candles[i].time * 1000 / 3_600_000) * 3_600_000;
 
-        const s = stats.all;
-        s.total++;
-        if (win) { s.wins++; s.gain += ret; s.gainN++; s.maxG = Math.max(s.maxG, ret); }
-        else     { s.loss += Math.abs(ret); s.lossN++; s.maxL = Math.max(s.maxL, Math.abs(ret)); }
+        // Long stats
+        const sl = stats.long;
+        sl.total++;
+        if (longWin) { sl.wins++; sl.gain += ret; sl.gainN++; sl.maxG = Math.max(sl.maxG, ret); }
+        else         { sl.loss += Math.abs(ret); sl.lossN++; sl.maxL = Math.max(sl.maxL, Math.abs(ret)); }
 
+        // Short stats (mirror returns)
+        const ss = stats.short;
+        ss.total++;
+        if (shortWin) { ss.wins++; ss.gain += Math.abs(ret); ss.gainN++; ss.maxG = Math.max(ss.maxG, Math.abs(ret)); }
+        else          { ss.loss += ret; ss.lossN++; ss.maxL = Math.max(ss.maxL, ret); }
+
+        // Funding rate conditions
         let fr: number | null = null;
         for (let lb = 0; lb <= 8; lb++) {
           const ts = hourTs - lb * 3_600_000;
           if (fundingMap.has(ts)) { fr = fundingMap.get(ts)!; break; }
         }
         if (fr !== null) {
-          if (fr > 0)       { stats.fundPos.total++;  if (win) stats.fundPos.wins++;  }
-          if (fr < 0)       { stats.fundNeg.total++;  if (win) stats.fundNeg.wins++;  }
-          if (fr > 0.0005)  { stats.fundHigh.total++; if (win) stats.fundHigh.wins++; }
-          if (fr < -0.0001) { stats.fundLow.total++;  if (win) stats.fundLow.wins++;  }
+          if (fr > 0)       { stats.fundPos.total++;  if (longWin) stats.fundPos.longWin++;  if (shortWin) stats.fundPos.shortWin++;  }
+          if (fr < 0)       { stats.fundNeg.total++;  if (longWin) stats.fundNeg.longWin++;  if (shortWin) stats.fundNeg.shortWin++;  }
+          if (fr > 0.0005)  { stats.fundHigh.total++; if (longWin) stats.fundHigh.longWin++; if (shortWin) stats.fundHigh.shortWin++; }
+          if (fr < -0.0001) { stats.fundLow.total++;  if (longWin) stats.fundLow.longWin++;  if (shortWin) stats.fundLow.shortWin++;  }
         }
       }
 
-      const s = stats.all;
-      const winRate       = s.wins / s.total;
-      const avgGain       = s.gainN > 0 ? s.gain / s.gainN : 0;
-      const avgLoss       = s.lossN > 0 ? s.loss / s.lossN : 0;
-      const expectedValue = winRate * avgGain - (1 - winRate) * avgLoss;
-      const wr = (st: { wins: number; total: number }) => st.total >= 10 ? st.wins / st.total : null;
+      const calcSide = (s: ReturnType<typeof mkSide>) => ({
+        winRate:       s.total > 0 ? s.wins / s.total : 0,
+        sampleCount:   s.total,
+        avgGain:       s.gainN > 0 ? s.gain / s.gainN : 0,
+        avgLoss:       s.lossN > 0 ? s.loss / s.lossN : 0,
+        expectedValue: s.total > 0 ? (s.wins / s.total) * (s.gainN > 0 ? s.gain / s.gainN : 0) - (1 - s.wins / s.total) * (s.lossN > 0 ? s.loss / s.lossN : 0) : 0,
+        maxGain:       s.maxG === -Infinity ? 0 : s.maxG,
+        maxLoss:       s.maxL === -Infinity ? 0 : s.maxL,
+      });
+
+      const longStats  = calcSide(stats.long);
+      const shortStats = calcSide(stats.short);
+      const wr = (wins: number, total: number) => total >= 10 ? wins / total : null;
 
       return json({
-        symbol, hours, winRate,
-        sampleCount: s.total,
-        avgGain, avgLoss, expectedValue,
-        maxGain: s.maxG === -Infinity ? 0 : s.maxG,
-        maxLoss: s.maxL === -Infinity ? 0 : s.maxL,
+        symbol, hours,
         currentPrice: candles[candles.length - 1].close,
         currentFunding,
+        long:  longStats,
+        short: shortStats,
+        // backward compat
+        winRate: longStats.winRate,
+        sampleCount: longStats.sampleCount,
+        avgGain: longStats.avgGain,
+        avgLoss: longStats.avgLoss,
+        expectedValue: longStats.expectedValue,
+        maxGain: longStats.maxGain,
+        maxLoss: longStats.maxLoss,
         funding: {
-          positive:    { winRate: wr(stats.fundPos),  sampleCount: stats.fundPos.total  },
-          negative:    { winRate: wr(stats.fundNeg),  sampleCount: stats.fundNeg.total  },
-          extremeHigh: { winRate: wr(stats.fundHigh), sampleCount: stats.fundHigh.total },
-          extremeLow:  { winRate: wr(stats.fundLow),  sampleCount: stats.fundLow.total  },
+          positive:    { long: wr(stats.fundPos.longWin, stats.fundPos.total),   short: wr(stats.fundPos.shortWin, stats.fundPos.total),   sampleCount: stats.fundPos.total,  winRate: wr(stats.fundPos.longWin, stats.fundPos.total)  },
+          negative:    { long: wr(stats.fundNeg.longWin, stats.fundNeg.total),   short: wr(stats.fundNeg.shortWin, stats.fundNeg.total),   sampleCount: stats.fundNeg.total,  winRate: wr(stats.fundNeg.longWin, stats.fundNeg.total)  },
+          extremeHigh: { long: wr(stats.fundHigh.longWin, stats.fundHigh.total), short: wr(stats.fundHigh.shortWin, stats.fundHigh.total), sampleCount: stats.fundHigh.total, winRate: wr(stats.fundHigh.longWin, stats.fundHigh.total) },
+          extremeLow:  { long: wr(stats.fundLow.longWin, stats.fundLow.total),   short: wr(stats.fundLow.shortWin, stats.fundLow.total),   sampleCount: stats.fundLow.total,  winRate: wr(stats.fundLow.longWin, stats.fundLow.total)  },
         },
         mlScore: null, mlDirection: null, mlProb: null,
       });
