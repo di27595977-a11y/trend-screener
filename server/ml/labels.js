@@ -18,71 +18,90 @@ export function createLabel(currentClose, futureClose, upThreshold = 0.02, downT
 }
 
 /**
+ * Fetch all rows for a symbol in paginated fashion.
+ */
+async function fetchAllForSymbol(supabase, symbol) {
+  const PAGE = 1000;
+  let offset = 0;
+  const all = [];
+  while (true) {
+    const { data, error } = await supabase
+      .from('ml_features')
+      .select('id, ts, features, label')
+      .eq('symbol', symbol)
+      .order('ts', { ascending: true })
+      .range(offset, offset + PAGE - 1);
+    if (error) throw new Error(`Fetch error for ${symbol}: ${error.message}`);
+    if (!data || data.length === 0) break;
+    all.push(...data);
+    if (data.length < PAGE) break;
+    offset += PAGE;
+  }
+  return all;
+}
+
+/**
  * Backfill labels for collected ml_features rows.
- * For each row where label IS NULL, look up the kline 4h later
- * and compute the forward return.
+ * Optimized: loads all rows per symbol at once, does local join to find 4h-future price.
  *
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase
  * @param {object} opts
- * @param {number}  opts.upThreshold    default 0.02
- * @param {number}  opts.downThreshold  default -0.02
- * @param {number}  opts.batchSize      rows per batch, default 500
  */
 export async function backfillLabels(supabase, {
   upThreshold   = 0.02,
   downThreshold = -0.02,
-  batchSize     = 500,
 } = {}) {
-  console.log('[labels] Starting label backfill...');
+  console.log('[labels] Starting optimized label backfill...');
 
-  let offset = 0;
+  // 1. Get distinct symbols that have unlabelled rows
+  const cutoff = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+  const { data: symbolRows, error: symErr } = await supabase
+    .from('ml_features')
+    .select('symbol')
+    .is('label', null)
+    .lt('ts', cutoff)
+    .limit(10000);
+
+  if (symErr) {
+    console.error('[labels] Error fetching symbols:', symErr.message);
+    return 0;
+  }
+
+  const symbols = [...new Set(symbolRows.map(r => r.symbol))];
+  console.log(`[labels] Found ${symbols.length} symbols with unlabelled data.`);
+
   let totalUpdated = 0;
 
-  while (true) {
-    // Fetch unlabelled rows (ts older than 4h so future price is available)
-    const cutoff = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
-    const { data: rows, error } = await supabase
-      .from('ml_features')
-      .select('id, symbol, ts, features')
-      .is('label', null)
-      .lt('ts', cutoff)
-      .order('ts', { ascending: true })
-      .range(offset, offset + batchSize - 1);
+  for (let si = 0; si < symbols.length; si++) {
+    const symbol = symbols[si];
 
-    if (error) {
-      console.error('[labels] Fetch error:', error.message);
-      break;
-    }
+    // Load ALL rows for this symbol (sorted by ts)
+    const rows = await fetchAllForSymbol(supabase, symbol);
 
-    if (!rows || rows.length === 0) break;
+    // Build a time-sorted array for binary search of future price
+    const timeIndex = rows.map(r => ({ ts: new Date(r.ts).getTime(), close: r.features?._close_price }));
 
-    // For each row, look up what the price was 4h later
     const updates = [];
     for (const row of rows) {
-      const futureTs = new Date(new Date(row.ts).getTime() + 4 * 60 * 60 * 1000).toISOString();
+      if (row.label !== null) continue; // already labelled
 
-      // Find closest feature row for same symbol at future timestamp
-      const { data: futureRow } = await supabase
-        .from('ml_features')
-        .select('features')
-        .eq('symbol', row.symbol)
-        .gte('ts', futureTs)
-        .order('ts', { ascending: true })
-        .limit(1)
-        .maybeSingle();
+      const rowTs = new Date(row.ts).getTime();
+      if (rowTs > Date.now() - 4 * 60 * 60 * 1000) continue; // too recent
 
-      if (!futureRow) continue;
-
-      const currentClose = row.features?.macd_line !== undefined
-        ? null // can't recover close from features, skip
-        : null;
-
-      // Use entry price stored in features if available, else skip
-      // We embed close_price as a pseudo-feature for label backfill
       const curClose = row.features?._close_price;
-      const futClose = futureRow.features?._close_price;
+      if (!curClose) continue;
 
-      if (!curClose || !futClose) continue;
+      // Find the first row with ts >= rowTs + 4h
+      const targetTs = rowTs + 4 * 60 * 60 * 1000;
+      let futClose = null;
+      for (let i = 0; i < timeIndex.length; i++) {
+        if (timeIndex[i].ts >= targetTs && timeIndex[i].close) {
+          futClose = timeIndex[i].close;
+          break;
+        }
+      }
+
+      if (!futClose) continue;
 
       const forwardReturn = (futClose - curClose) / curClose;
       const label = createLabel(curClose, futClose, upThreshold, downThreshold);
@@ -90,20 +109,22 @@ export async function backfillLabels(supabase, {
       updates.push({ id: row.id, label, forward_return_4h: forwardReturn });
     }
 
+    // Batch update via parallel chunks
     if (updates.length > 0) {
-      // Batch update
-      for (const upd of updates) {
-        await supabase
-          .from('ml_features')
-          .update({ label: upd.label, forward_return_4h: upd.forward_return_4h })
-          .eq('id', upd.id);
+      const CHUNK = 50;
+      for (let c = 0; c < updates.length; c += CHUNK) {
+        const chunk = updates.slice(c, c + CHUNK);
+        await Promise.all(chunk.map(upd =>
+          supabase
+            .from('ml_features')
+            .update({ label: upd.label, forward_return_4h: upd.forward_return_4h })
+            .eq('id', upd.id)
+        ));
       }
       totalUpdated += updates.length;
-      console.log(`[labels] Updated ${totalUpdated} labels so far...`);
     }
 
-    if (rows.length < batchSize) break;
-    offset += batchSize;
+    console.log(`[labels] ${si + 1}/${symbols.length} ${symbol}: ${updates.length} labelled (total: ${totalUpdated})`);
   }
 
   console.log(`[labels] Backfill complete. Total updated: ${totalUpdated}`);

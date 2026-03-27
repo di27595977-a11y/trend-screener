@@ -169,11 +169,22 @@ export async function trainModel({ epochs = 50, batchSize = 256 } = {}) {
   const xVal   = tf.tensor2d(valXScaled);
   const yVal   = tf.tensor2d(val.Y);
 
+  // Compute class weights to handle imbalanced labels
+  const labelCounts = [0, 0, 0]; // [down, flat, up]
+  for (const y of train.Y) labelCounts[y.indexOf(1)]++;
+  const totalSamples = train.Y.length;
+  const classWeight = {};
+  for (let c = 0; c < 3; c++) {
+    classWeight[c] = labelCounts[c] > 0 ? totalSamples / (3 * labelCounts[c]) : 1;
+  }
+  console.log(`[train] Class weights: down=${classWeight[0].toFixed(2)}, flat=${classWeight[1].toFixed(2)}, up=${classWeight[2].toFixed(2)}`);
+
   console.log(`[train] Training for ${epochs} epochs, batch ${batchSize}...`);
   const history = await model.fit(xTrain, yTrain, {
     epochs,
     batchSize,
     validationData: [xVal, yVal],
+    classWeight,
     callbacks: {
       onEpochEnd: (epoch, logs) => {
         if ((epoch + 1) % 10 === 0 || epoch === 0) {
@@ -199,9 +210,23 @@ export async function trainModel({ epochs = 50, batchSize = 256 } = {}) {
   console.log('[train] Confusion matrix (rows=actual, cols=predicted):');
   console.table(cm);
 
-  // Save model
+  // Save model - use IOHandler for cross-platform compatibility
   if (!existsSync(MODEL_DIR)) mkdirSync(MODEL_DIR, { recursive: true });
-  await model.save(`file://${MODEL_DIR}`);
+  await model.save(tf.io.withSaveHandler(async (artifacts) => {
+    const modelJSON = {
+      modelTopology: artifacts.modelTopology,
+      weightsManifest: [{
+        paths: ['weights.bin'],
+        weights: artifacts.weightSpecs,
+      }],
+      format: 'layers-model',
+      generatedBy: 'TensorFlow.js tfjs-layers',
+      convertedBy: null,
+    };
+    writeFileSync(join(MODEL_DIR, 'model.json'), JSON.stringify(modelJSON));
+    writeFileSync(join(MODEL_DIR, 'weights.bin'), Buffer.from(artifacts.weightData));
+    return { modelArtifactsInfo: { dateSaved: new Date(), modelTopologyType: 'JSON' } };
+  }));
   console.log(`[train] Model saved to ${MODEL_DIR}`);
 
   // Save metrics

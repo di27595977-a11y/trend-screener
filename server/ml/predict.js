@@ -49,7 +49,17 @@ export async function loadModel() {
   }
 
   try {
-    _model  = await _tf.loadLayersModel(`file://${MODEL_DIR}/model.json`);
+    // Load model via IOHandler for cross-platform compatibility (no tfjs-node needed)
+    const modelJsonPath = join(MODEL_DIR, 'model.json');
+    const modelJSON = JSON.parse(readFileSync(modelJsonPath, 'utf8'));
+    const weightsPath = join(MODEL_DIR, modelJSON.weightsManifest[0].paths[0]);
+    const weightData = readFileSync(weightsPath).buffer;
+
+    _model = await _tf.loadLayersModel(_tf.io.fromMemory(
+      modelJSON.modelTopology,
+      modelJSON.weightsManifest[0].weights,
+      weightData,
+    ));
     _scaler = JSON.parse(readFileSync(SCALER_PATH, 'utf8'));
     _metrics = existsSync(METRICS_PATH)
       ? JSON.parse(readFileSync(METRICS_PATH, 'utf8'))

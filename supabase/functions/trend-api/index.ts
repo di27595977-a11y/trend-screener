@@ -1,5 +1,5 @@
 import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
-import { fetchCandles, fetchTradableSymbols } from '../_shared/binance.ts';
+import { fetchCandles, fetchTradableSymbols, requestBinance } from '../_shared/binance.ts';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import {
   buildBacktestReport,
