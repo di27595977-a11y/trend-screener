@@ -13,15 +13,16 @@ const HEADERS = [
   '\u5f62\u614b',
   '\u5efa\u8b70',
   'ML',
+  '\u5340\u9593',
   '\u8d70\u52e2',
 ];
 
-export default function CoinTable({ rows, priceMap, onSelect }) {
+export default function CoinTable({ rows, priceMap, rangeMap = {}, onSelect }) {
   return (
     <section className="panel overflow-hidden rounded-[28px]">
       <div className="lg:hidden">
         {rows.map((coin) => (
-          <CoinCard key={`${coin.symbol}-${coin.timeframe}`} coin={coin} livePrice={priceMap[coin.symbol]} onSelect={onSelect} />
+          <CoinCard key={`${coin.symbol}-${coin.timeframe}`} coin={coin} livePrice={priceMap[coin.symbol]} rangeSignal={rangeMap[coin.symbol]} onSelect={onSelect} />
         ))}
       </div>
 
@@ -38,7 +39,7 @@ export default function CoinTable({ rows, priceMap, onSelect }) {
           </thead>
           <tbody>
             {rows.map((coin) => (
-              <CoinRow key={`${coin.symbol}-${coin.timeframe}`} coin={coin} livePrice={priceMap[coin.symbol]} onSelect={onSelect} />
+              <CoinRow key={`${coin.symbol}-${coin.timeframe}`} coin={coin} livePrice={priceMap[coin.symbol]} rangeSignal={rangeMap[coin.symbol]} onSelect={onSelect} />
             ))}
           </tbody>
         </table>

@@ -1,5 +1,6 @@
 import ScoreBadge from './ScoreBadge';
 import PatternTags from './PatternTags';
+import RangeSignalBadge from './RangeSignalBadge';
 import Sparkline from './Sparkline';
 import TradeSignalBadge from './TradeSignalBadge';
 import { generateTradeAdvice } from '../lib/tradeAdvisor';
@@ -18,7 +19,7 @@ function MlScoreBadge({ score, direction }) {
   );
 }
 
-export default function CoinRow({ coin, livePrice, onSelect }) {
+export default function CoinRow({ coin, livePrice, rangeSignal, onSelect }) {
   const currentPrice = livePrice?.price ?? coin.currentPrice ?? coin.entryPrice;
   const liveChange = livePrice?.change24h ?? coin.priceChangePct;
   const changeTone = liveChange >= 0 ? 'text-emerald-200' : 'text-rose-200';
@@ -65,6 +66,9 @@ export default function CoinRow({ coin, livePrice, onSelect }) {
       </td>
       <td className="px-4 py-4">
         <MlScoreBadge score={coin.mlScore} direction={coin.mlDirection} />
+      </td>
+      <td className="px-4 py-4">
+        <RangeSignalBadge signal={rangeSignal} />
       </td>
       <td className="px-4 py-4">
         <Sparkline values={coin.sparkline} />

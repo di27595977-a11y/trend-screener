@@ -1,4 +1,5 @@
 import PatternTags from './PatternTags';
+import RangeSignalBadge from './RangeSignalBadge';
 import ScoreBadge from './ScoreBadge';
 import Sparkline from './Sparkline';
 import TradeSignalBadge from './TradeSignalBadge';
@@ -14,7 +15,7 @@ function StatItem({ label, value, tone = 'text-slate-200' }) {
   );
 }
 
-export default function CoinCard({ coin, livePrice, onSelect }) {
+export default function CoinCard({ coin, livePrice, rangeSignal, onSelect }) {
   const currentPrice = livePrice?.price ?? coin.currentPrice ?? coin.entryPrice;
   const liveChange = livePrice?.change24h ?? coin.priceChangePct;
   const changeTone = liveChange >= 0 ? 'text-emerald-200' : 'text-rose-200';
@@ -50,6 +51,7 @@ export default function CoinCard({ coin, livePrice, onSelect }) {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <ScoreBadge score={coin.trendScore} />
             <TradeSignalBadge direction={advice.direction} confidence={advice.confidence} />
+            <RangeSignalBadge signal={rangeSignal} />
           </div>
         </div>
 

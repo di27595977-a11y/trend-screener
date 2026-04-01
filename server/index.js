@@ -9,6 +9,8 @@ import { getModelMetrics, isModelReady, loadModel, predictSymbol } from './ml/pr
 import { trainModel } from './ml/train.js';
 import { computeFeatures, FEATURE_COLUMNS } from './ml/features.js';
 import { fetchSymbolData, collectFeaturesForSymbol } from './ml/dataPipeline.js';
+import { RangeDetector } from './rangeDetector.js';
+import { isTelegramConfigured, notifyRangeSignals, sendTelegram } from './telegram.js';
 
 dotenv.config();
 
@@ -17,6 +19,7 @@ const port = Number.parseInt(process.env.PORT || '8787', 10);
 const persistence = createPersistenceLayer();
 const scanJob = new ScanJob({ persistence });
 const backtestJob = new BacktestJob({ persistence });
+const rangeDetector = new RangeDetector();
 
 app.use(cors());
 app.use(express.json());
@@ -135,6 +138,41 @@ app.get('/api/alpha-signals', async (request, response, next) => {
     const limit = Math.min(Number.parseInt(request.query.limit || '100', 10), 500);
     const signals = await persistence.getAlphaSignals(limit);
     response.json(signals);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Range Detection API ─────────────────────────────────────────────────────
+
+app.get('/api/range/signals', (_request, response) => {
+  response.json({
+    signals: rangeDetector.getSignals(),
+    lastScanAt: rangeDetector.lastScanAt,
+    config: rangeDetector.getConfig(),
+    telegramConfigured: isTelegramConfigured(),
+  });
+});
+
+app.post('/api/range/scan', (_request, response) => {
+  rangeDetector
+    .scan()
+    .then((signals) => notifyRangeSignals(signals, rangeDetector))
+    .catch((error) => console.error('[Range] Manual scan failed:', error.message));
+
+  response.status(202).json({ ok: true, message: 'Range scan started.' });
+});
+
+app.put('/api/range/config', (request, response) => {
+  const patch = request.body || {};
+  rangeDetector.updateConfig(patch);
+  response.json(rangeDetector.getConfig());
+});
+
+app.post('/api/range/test-telegram', async (_request, response, next) => {
+  try {
+    const result = await sendTelegram('🧪 Trend Screener 區間偵測 — Telegram 連線測試成功！');
+    response.json(result);
   } catch (error) {
     next(error);
   }
@@ -315,6 +353,25 @@ app.listen(port, () => {
   console.log(`Trend Screener API listening on http://localhost:${port}`);
   scanJob.start();
   backtestJob.start();
+
+  // ── Range Detector Scheduler ─────────────────────────────────────────────
+  // Run range scan every 5 minutes
+  const runRangeScan = async () => {
+    try {
+      const signals = await rangeDetector.scan();
+      if (signals.length) {
+        await notifyRangeSignals(signals, rangeDetector);
+      }
+    } catch (err) {
+      console.error('[Range] Scheduled scan failed:', err.message);
+    }
+  };
+
+  // Initial scan after 30s (let main scan start first)
+  setTimeout(runRangeScan, 30_000);
+
+  cron.schedule('*/5 * * * *', runRangeScan);
+  console.log(`[Range] Scheduler: every 5min, top30=${rangeDetector.config.top30Only}, telegram=${isTelegramConfigured()}`);
 
   // ── ML Scheduler ────────────────────────────────────────────────────────
   if (process.env.ENABLE_ML === 'true') {

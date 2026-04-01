@@ -6,8 +6,9 @@ import SymbolLookupPanel from './SymbolLookupPanel';
 import StatusBar from './StatusBar';
 import CoinTable from './CoinTable';
 import MlStatusPanel from './MlStatusPanel';
+import RangePanel from './RangePanel';
 import { loadDashboardSnapshot, triggerScan } from '../services/scanner';
-import { getRuntimeSettings, updateRuntimeSettings } from '../services/binanceApi';
+import { getRangeSignals, getRuntimeSettings, updateRuntimeSettings } from '../services/binanceApi';
 import { DEFAULT_RUNTIME_SETTINGS } from '../config/runtimeSettings.js';
 import wsManager from '../services/wsManager';
 
@@ -124,6 +125,7 @@ export default function Dashboard() {
   const [settingsSavedAt, setSettingsSavedAt] = useState('');
   const [error, setError] = useState('');
   const [wsConnected, setWsConnected] = useState(false);
+  const [rangeMap, setRangeMap] = useState({});
   const deferredSearch = useDeferredValue(filters.search.trim().toUpperCase());
 
   useEffect(() => {
@@ -145,6 +147,20 @@ export default function Dashboard() {
       unsubscribeConnection();
       wsManager.disconnectMiniTicker();
     };
+  }, []);
+
+  useEffect(() => {
+    const loadRange = async () => {
+      try {
+        const data = await getRangeSignals();
+        const map = {};
+        for (const sig of data.signals || []) map[sig.symbol] = sig;
+        startTransition(() => setRangeMap(map));
+      } catch { /* silent */ }
+    };
+    loadRange();
+    const timer = setInterval(loadRange, 30_000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -303,10 +319,11 @@ export default function Dashboard() {
     <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
       <div className="space-y-4 xl:space-y-6">
         <div className="panel rounded-[28px] p-2 xl:hidden">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {[
               ['filters', '\u7be9\u9078'],
               ['strategy', '\u7b56\u7565'],
+              ['range', '\u5340\u9593'],
             ].map(([key, label]) => (
               <button
                 key={key}
@@ -339,6 +356,8 @@ export default function Dashboard() {
                 });
               }}
             />
+          ) : mobilePanel === 'range' ? (
+            <RangePanel onOpenChart={(symbol) => navigate(`/chart/${symbol}`)} />
           ) : (
             <StrategySettingsPanel
               settings={strategySettings}
@@ -394,6 +413,8 @@ export default function Dashboard() {
             }}
             onSave={handleSaveSettings}
           />
+
+          <RangePanel onOpenChart={(symbol) => navigate(`/chart/${symbol}`)} />
         </div>
       </div>
 
@@ -448,6 +469,7 @@ export default function Dashboard() {
           <CoinTable
             rows={visibleRows}
             priceMap={priceMap}
+            rangeMap={rangeMap}
             onSelect={(coin) => navigate(`/chart/${coin.symbol}`, { state: { coin } })}
           />
         )}

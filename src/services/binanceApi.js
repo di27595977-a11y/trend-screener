@@ -182,6 +182,27 @@ export async function triggerMlTrain({ epochs = 50, batchSize = 256 } = {}) {
   });
 }
 
+// ─── Range Detection API ─────────────────────────────────────────────────────
+
+export async function getRangeSignals() {
+  return requestJson('/range/signals');
+}
+
+export async function triggerRangeScan() {
+  return requestJson('/range/scan', { method: 'POST' });
+}
+
+export async function updateRangeConfig(config) {
+  return requestJson('/range/config', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+}
+
+export async function testRangeTelegram() {
+  return requestJson('/range/test-telegram', { method: 'POST' });
+}
+
 export function buildBinanceChartUrl(symbol) {
   return `https://www.binance.com/en/futures/${symbol}`;
 }
