@@ -142,7 +142,7 @@ export async function getSymbolOverview(symbol) {
   return requestJson(`/scan/${symbol}`);
 }
 
-export async function getSymbolCandles(symbol, { interval = '1h', limit = 72 } = {}) {
+export async function getSymbolCandles(symbol, { interval = '1h', limit = 120 } = {}) {
   const data = await invokeTrendApi('chart-data', { symbol, interval, limit });
   if (data) return data;
 

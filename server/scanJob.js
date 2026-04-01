@@ -357,7 +357,7 @@ export class ScanJob {
     const patternDetails = new Map();
 
     await runBatches(candidatesForPatterns, Math.max(1, Math.floor(this.requestsPerSecond / 2)), async (result) => {
-      const candles = await fetchCandles(result.symbol, '1h', 72);
+      const candles = await fetchCandles(result.symbol, '1h', 120);
       const patterns = detectAllPatterns(candles);
       patternDetails.set(result.symbol, patterns);
       patternSummaries.set(result.symbol, summarizePatterns(patterns));

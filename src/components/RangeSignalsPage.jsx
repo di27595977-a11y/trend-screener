@@ -136,7 +136,7 @@ export default function RangeSignalsPage() {
             <p className="font-mono text-xs uppercase tracking-[0.35em] text-amber-300/75">區間偵測</p>
             <h2 className="mt-2 text-xl font-semibold text-white sm:text-2xl">S/R 壓力支撐震盪訊號</h2>
             <p className="mt-2 text-sm text-slate-300">
-              掃描前 30 大市值幣，當價格觸及 1H K 線壓力/支撐位時產生訊號，4H 作為輔助確認。
+              掃描前 80 大市值幣，當價格觸及 1H K 線壓力/支撐位時產生訊號，4H 作為輔助確認。
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -246,7 +246,7 @@ export default function RangeSignalsPage() {
         <div className="panel-soft rounded-[24px] px-5 py-5">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-400">訊號總數</p>
           <p className="mt-3 font-mono text-3xl text-white">{signals.length}</p>
-          <p className="mt-2 text-sm text-slate-300">前 30 大市值幣種掃描</p>
+          <p className="mt-2 text-sm text-slate-300">前 80 大市值幣種掃描</p>
         </div>
         <div className="panel-soft rounded-[24px] px-5 py-5">
           <p className="text-xs uppercase tracking-[0.28em] text-emerald-400/70">做多訊號</p>
@@ -263,7 +263,7 @@ export default function RangeSignalsPage() {
       {/* Signal List */}
       {loading ? (
         <div className="panel flex min-h-[320px] items-center justify-center rounded-[28px] text-slate-300">
-          正在掃描前 30 大市值幣種的壓力/支撐位...
+          正在掃描前 80 大市值幣種的壓力/支撐位...
         </div>
       ) : signals.length === 0 ? (
         <div className="panel flex min-h-[200px] items-center justify-center rounded-[28px] text-slate-400">

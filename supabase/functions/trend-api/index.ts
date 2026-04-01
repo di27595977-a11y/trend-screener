@@ -90,12 +90,12 @@ async function fetchTop30Symbols() {
   return data
     .filter((t) => t.symbol.endsWith('USDT'))
     .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
-    .slice(0, 30)
+    .slice(0, 80)
     .map((t) => t.symbol);
 }
 
 async function analyzeRangeSymbol(symbol: string, cfg: { proximityPct: number; minRangeWidthPct: number; maxRangeWidthPct: number; minTouches: number }) {
-  const candles1h = await fetchCandles(symbol, '1h', 72);
+  const candles1h = await fetchCandles(symbol, '1h', 120);
   if (candles1h.length < 30) return null;
 
   const currentPrice = candles1h[candles1h.length - 1].close;
@@ -136,7 +136,7 @@ async function analyzeRangeSymbol(symbol: string, cfg: { proximityPct: number; m
 
   let has4hConfirm = false;
   try {
-    const candles4h = await fetchCandles(symbol, '4h', 72);
+    const candles4h = await fetchCandles(symbol, '4h', 70);
     if (candles4h.length >= 20) {
       const levels4h = detectSR(candles4h, 2);
       has4hConfirm = levels4h.some((l) => l.type === targetLevel.type && Math.abs(l.price - targetLevel.price) / targetLevel.price < 0.01);

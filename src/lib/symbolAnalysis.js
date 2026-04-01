@@ -311,7 +311,7 @@ export async function analyzeSymbol(input, { settings, scannerStatus, mode = 'tr
       overviewPromise,
       getSymbolCandles(symbol, { interval: '1h', limit: SCAN_TIMEFRAME_CONFIG['1h'].limit }),
       getSymbolCandles(symbol, { interval: '4h', limit: SCAN_TIMEFRAME_CONFIG['4h'].limit }),
-      getSymbolCandles(symbol, { interval: '1h', limit: 72 }),
+      getSymbolCandles(symbol, { interval: '1h', limit: 120 }),
     ]);
 
     if ((candles1h.candles || []).length < SCAN_TIMEFRAME_CONFIG['1h'].limit) {

@@ -11,8 +11,8 @@ const DEFAULT_RANGE_CONFIG = {
   cooldownMinutes: 60,       // per-symbol cooldown between Telegram pushes
   rsiOverbought: 65,         // RSI above this near resistance = stronger short
   rsiOversold: 35,           // RSI below this near support = stronger long
-  lookback1h: 72,            // candles for 1H S/R detection
-  lookback4h: 72,            // candles for 4H S/R detection
+  lookback1h: 120,           // candles for 1H S/R detection
+  lookback4h: 70,            // candles for 4H S/R detection
   swingLookback: 3,          // bars for swing point detection
   clusterTolerance: 0.005,   // 0.5% clustering tolerance
 };
@@ -157,7 +157,7 @@ async function fetchTop30Symbols() {
   return data
     .filter((t) => t.symbol.endsWith('USDT'))
     .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
-    .slice(0, 30)
+    .slice(0, 80)
     .map((t) => t.symbol);
 }
 
