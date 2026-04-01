@@ -328,16 +328,16 @@ export function findSwingPoints(candles: Candle[], lookback = 3) {
   return { swingHighs, swingLows };
 }
 
-function detectSupportResistance(swingHighs: SwingPoint[], swingLows: SwingPoint[], tolerance = 0.015) {
+function detectSupportResistance(swingHighs: SwingPoint[], swingLows: SwingPoint[], tolerance = 0.008) {
   const levels: Array<{ price: number; priceHigh: number; priceLow: number; type: 'resistance' | 'support'; touches: number; strength: string; flipped: boolean }> = [];
 
   clusterPoints(swingHighs, tolerance).forEach((cluster) => {
     if (cluster.length >= 2) {
-      const prices = cluster.map((p) => p.price);
+      const avgPrice = cluster.reduce((s, p) => s + p.price, 0) / cluster.length;
       levels.push({
-        price: prices.reduce((s, v) => s + v, 0) / prices.length,
-        priceHigh: Math.max(...prices),
-        priceLow: Math.min(...prices),
+        price: avgPrice,
+        priceHigh: avgPrice * 1.003,
+        priceLow: avgPrice * 0.997,
         type: 'resistance',
         touches: cluster.length,
         strength: cluster.length >= 3 ? 'strong' : 'normal',
@@ -348,11 +348,11 @@ function detectSupportResistance(swingHighs: SwingPoint[], swingLows: SwingPoint
 
   clusterPoints(swingLows, tolerance).forEach((cluster) => {
     if (cluster.length >= 2) {
-      const prices = cluster.map((p) => p.price);
+      const avgPrice = cluster.reduce((s, p) => s + p.price, 0) / cluster.length;
       levels.push({
-        price: prices.reduce((s, v) => s + v, 0) / prices.length,
-        priceHigh: Math.max(...prices),
-        priceLow: Math.min(...prices),
+        price: avgPrice,
+        priceHigh: avgPrice * 1.003,
+        priceLow: avgPrice * 0.997,
         type: 'support',
         touches: cluster.length,
         strength: cluster.length >= 3 ? 'strong' : 'normal',

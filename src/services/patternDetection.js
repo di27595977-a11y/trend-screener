@@ -364,17 +364,16 @@ function buildHarmonicCandidate(points, candles) {
   return candidates.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
-export function detectSupportResistance(swingHighs, swingLows, tolerance = 0.015) {
+export function detectSupportResistance(swingHighs, swingLows, tolerance = 0.008) {
   const levels = [];
 
   clusterPoints(swingHighs, tolerance).forEach((cluster) => {
     if (cluster.length >= 2) {
-      const prices = cluster.map((point) => point.price);
-      const avgPrice = prices.reduce((sum, value) => sum + value, 0) / prices.length;
+      const avgPrice = cluster.reduce((sum, point) => sum + point.price, 0) / cluster.length;
       levels.push({
         price: avgPrice,
-        priceHigh: Math.max(...prices),
-        priceLow: Math.min(...prices),
+        priceHigh: avgPrice * 1.003,
+        priceLow: avgPrice * 0.997,
         type: 'resistance',
         touches: cluster.length,
         points: cluster,
@@ -386,12 +385,11 @@ export function detectSupportResistance(swingHighs, swingLows, tolerance = 0.015
 
   clusterPoints(swingLows, tolerance).forEach((cluster) => {
     if (cluster.length >= 2) {
-      const prices = cluster.map((point) => point.price);
-      const avgPrice = prices.reduce((sum, value) => sum + value, 0) / prices.length;
+      const avgPrice = cluster.reduce((sum, point) => sum + point.price, 0) / cluster.length;
       levels.push({
         price: avgPrice,
-        priceHigh: Math.max(...prices),
-        priceLow: Math.min(...prices),
+        priceHigh: avgPrice * 1.003,
+        priceLow: avgPrice * 0.997,
         type: 'support',
         touches: cluster.length,
         points: cluster,

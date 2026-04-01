@@ -14,7 +14,7 @@ const DEFAULT_RANGE_CONFIG = {
   lookback1h: 240,           // candles for 1H S/R detection (10 days)
   lookback4h: 168,           // candles for 4H S/R detection (28 days)
   swingLookback: 3,          // bars for swing point detection
-  clusterTolerance: 0.015,   // 1.5% clustering tolerance
+  clusterTolerance: 0.008,   // 0.8% clustering tolerance
 };
 
 // ─── Technical Helpers ───────────────────────────────────────────────────────
