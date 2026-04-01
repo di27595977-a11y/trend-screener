@@ -85,13 +85,13 @@ function scoreRangeSignal(opts: { proximity: number; touches: number; rsi: numbe
   return Math.min(score, 100);
 }
 
-async function fetchTop30Symbols() {
+async function fetchTopSymbolsN(topN = 80) {
   const data: any[] = await requestBinance('/fapi/v1/ticker/24hr', {});
   return data
-    .filter((t) => t.symbol.endsWith('USDT'))
-    .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
-    .slice(0, 80)
-    .map((t) => t.symbol);
+    .filter((t: any) => t.symbol.endsWith('USDT'))
+    .sort((a: any, b: any) => Number(b.quoteVolume) - Number(a.quoteVolume))
+    .slice(0, topN)
+    .map((t: any) => t.symbol);
 }
 
 async function analyzeRangeSymbol(symbol: string, cfg: { proximityPct: number; minRangeWidthPct: number; maxRangeWidthPct: number; minTouches: number }, timeframe = '1h') {
@@ -442,7 +442,12 @@ Deno.serve(async (request) => {
         minTouches: Number(body.minTouches) || 2,
       };
 
-      const symbols = await fetchTop30Symbols();
+      const topN = Number(body.topN) || 80;
+      const customList: string[] = Array.isArray(body.customSymbols) ? body.customSymbols : [];
+      const baseSymbols = await fetchTopSymbolsN(topN);
+      const symbolSet = new Set(baseSymbols);
+      for (const sym of customList) { if (sym && sym.endsWith('USDT')) symbolSet.add(sym); }
+      const symbols = [...symbolSet];
       const signals: any[] = [];
 
       // Process in batches of 3 to respect rate limits

@@ -149,7 +149,7 @@ function detectSupportResistance(candles, cfg) {
 
 // ─── Top-30 Market Cap Filter (using 24h quote volume as proxy) ──────────────
 
-async function fetchTop30Symbols() {
+async function fetchTopSymbols(topN = 80) {
   const data = await fetch(
     `${process.env.BINANCE_API_BASE || 'https://fapi.binance.com'}/fapi/v1/ticker/24hr`,
   ).then((r) => r.json());
@@ -157,7 +157,7 @@ async function fetchTop30Symbols() {
   return data
     .filter((t) => t.symbol.endsWith('USDT'))
     .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
-    .slice(0, 80)
+    .slice(0, topN)
     .map((t) => t.symbol);
 }
 
@@ -224,12 +224,19 @@ export class RangeDetector {
     this.cooldowns.set(symbol, Date.now());
   }
 
-  async scan(timeframe = '1h') {
+  async scan(timeframe = '1h', { topN, customSymbols = [] } = {}) {
     const cfg = this.config;
     const startedAt = Date.now();
 
     // 1. Get target symbols
-    const symbols = cfg.top30Only ? await fetchTop30Symbols() : await fetchTradableSymbols();
+    const count = topN || 80;
+    const baseSymbols = cfg.top30Only ? await fetchTopSymbols(count) : await fetchTradableSymbols();
+    // Merge custom symbols (deduplicate)
+    const symbolSet = new Set(baseSymbols);
+    for (const sym of customSymbols) {
+      if (sym && sym.endsWith('USDT')) symbolSet.add(sym);
+    }
+    const symbols = [...symbolSet];
     this.logger.log(`[Range] Scanning ${symbols.length} symbols on ${timeframe}...`);
 
     const signals = [];

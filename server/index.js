@@ -145,13 +145,21 @@ app.get('/api/alpha-signals', async (request, response, next) => {
 
 // ─── Range Detection API ─────────────────────────────────────────────────────
 
-app.get('/api/range/signals', (_request, response) => {
-  response.json({
-    signals: rangeDetector.getSignals(),
-    lastScanAt: rangeDetector.lastScanAt,
-    config: rangeDetector.getConfig(),
-    telegramConfigured: isTelegramConfigured(),
-  });
+app.get('/api/range/signals', async (request, response, next) => {
+  try {
+    const timeframe = request.query.timeframe || '1h';
+    const topN = request.query.topN ? Number(request.query.topN) : undefined;
+    const customSymbols = request.query.customSymbols ? request.query.customSymbols.split(',').filter(Boolean) : [];
+    const signals = await rangeDetector.scan(timeframe, { topN, customSymbols });
+    response.json({
+      signals,
+      lastScanAt: rangeDetector.lastScanAt,
+      config: rangeDetector.getConfig(),
+      telegramConfigured: isTelegramConfigured(),
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/range/scan', (request, response) => {

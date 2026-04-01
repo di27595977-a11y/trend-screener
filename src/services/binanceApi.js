@@ -187,7 +187,11 @@ export async function triggerMlTrain({ epochs = 50, batchSize = 256 } = {}) {
 export async function getRangeSignals(config = {}) {
   const data = await invokeTrendApi('range-signals', config);
   if (data) return data;
-  return requestJson('/range/signals');
+  const params = new URLSearchParams();
+  if (config.timeframe) params.set('timeframe', config.timeframe);
+  if (config.topN) params.set('topN', String(config.topN));
+  if (config.customSymbols?.length) params.set('customSymbols', config.customSymbols.join(','));
+  return requestJson(`/range/signals?${params.toString()}`);
 }
 
 export async function triggerRangeScan() {

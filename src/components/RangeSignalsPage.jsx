@@ -78,12 +78,17 @@ export default function RangeSignalsPage() {
   const [scanning, setScanning] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [configDraft, setConfigDraft] = useState({});
+  const [topN, setTopN] = useState(80);
+  const [customSymbols, setCustomSymbols] = useState('');
   const [telegramMsg, setTelegramMsg] = useState('');
 
   const load = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const result = await getRangeSignals({ timeframe });
+      const extra = customSymbols.trim()
+        ? customSymbols.split(/[,\s]+/).map((s) => s.toUpperCase().replace(/USDT$/, '') + 'USDT').filter(Boolean)
+        : [];
+      const result = await getRangeSignals({ timeframe, topN, customSymbols: extra });
       setData(result);
       setConfigDraft(result.config || {});
     } catch { /* silent */ }
@@ -94,7 +99,7 @@ export default function RangeSignalsPage() {
     load(true);
     const timer = setInterval(() => load(false), 60_000);
     return () => clearInterval(timer);
-  }, [timeframe]);
+  }, [timeframe, topN]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -187,7 +192,50 @@ export default function RangeSignalsPage() {
       {/* Config Panel */}
       {showConfig && (
         <div className="panel rounded-[28px] px-6 py-5">
-          <h3 className="mb-4 text-sm font-semibold text-white">偵測參數</h3>
+          <h3 className="mb-4 text-sm font-semibold text-white">掃描範圍</h3>
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            <div>
+              <label className="mb-2 flex items-center justify-between text-xs text-slate-300">
+                <span>前 N 大市值</span>
+                <span className="font-mono text-white">{topN}</span>
+              </label>
+              <input
+                type="range" min="10" max="200" step="10"
+                value={topN}
+                onChange={(e) => setTopN(Number(e.target.value))}
+                className="w-full accent-amber-400"
+              />
+              <div className="mt-1 flex justify-between text-[10px] text-slate-500">
+                <span>10</span><span>50</span><span>100</span><span>150</span><span>200</span>
+              </div>
+            </div>
+            <div className="sm:col-span-2 lg:col-span-2">
+              <label className="mb-2 block text-xs text-slate-300">自訂幣種（逗號或空格分隔，自動補 USDT）</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={customSymbols}
+                  onChange={(e) => setCustomSymbols(e.target.value.toUpperCase())}
+                  placeholder="BTC, ETH, SOL, DOGE..."
+                  className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-500 focus:border-amber-400/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => load(true)}
+                  className="rounded-lg bg-amber-400/15 px-3 py-2 text-xs font-medium text-amber-200 transition hover:bg-amber-400/25"
+                >
+                  套用
+                </button>
+              </div>
+              {customSymbols.trim() && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  將額外掃描：{customSymbols.split(/[,\s]+/).filter(Boolean).join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <h3 className="mb-4 mt-6 text-sm font-semibold text-white">偵測參數</h3>
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="mb-2 flex items-center justify-between text-xs text-slate-300">
@@ -263,7 +311,7 @@ export default function RangeSignalsPage() {
         <div className="panel-soft rounded-[24px] px-5 py-5">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-400">訊號總數</p>
           <p className="mt-3 font-mono text-3xl text-white">{signals.length}</p>
-          <p className="mt-2 text-sm text-slate-300">前 80 大市值幣種掃描</p>
+          <p className="mt-2 text-sm text-slate-300">前 {topN} 大{customSymbols.trim() ? ' + 自訂幣種' : ''}</p>
         </div>
         <div className="panel-soft rounded-[24px] px-5 py-5">
           <p className="text-xs uppercase tracking-[0.28em] text-emerald-400/70">做多訊號</p>
