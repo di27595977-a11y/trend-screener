@@ -11,8 +11,8 @@ const DEFAULT_RANGE_CONFIG = {
   cooldownMinutes: 60,       // per-symbol cooldown between Telegram pushes
   rsiOverbought: 65,         // RSI above this near resistance = stronger short
   rsiOversold: 35,           // RSI below this near support = stronger long
-  lookback1h: 120,           // candles for 1H S/R detection
-  lookback4h: 70,            // candles for 4H S/R detection
+  lookback1h: 240,           // candles for 1H S/R detection (10 days)
+  lookback4h: 168,           // candles for 4H S/R detection (28 days)
   swingLookback: 3,          // bars for swing point detection
   clusterTolerance: 0.015,   // 1.5% clustering tolerance
 };

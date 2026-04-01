@@ -462,7 +462,7 @@ export default function ChartDetail() {
     async function load() {
       try {
         setLoading(true);
-        const candleLimit = 120;
+        const candleLimit = chartTimeframe === '4h' ? 168 : 240;
         const [candleResponse, overviewResponse] = await Promise.all([getSymbolCandles(symbol, { interval: chartTimeframe, limit: candleLimit }), getSymbolOverview(symbol)]);
 
         if (cancelled) {
@@ -562,7 +562,8 @@ export default function ChartDetail() {
         }
 
         shouldRecalculatePatternsRef.current = kline.isClosed;
-        return next.slice(-120);
+        const maxCandles = chartTimeframe === '4h' ? 168 : 240;
+        return next.slice(-maxCandles);
       });
     });
 

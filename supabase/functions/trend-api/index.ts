@@ -98,8 +98,8 @@ async function fetchTopSymbolsN(topN = 80) {
 async function analyzeRangeSymbol(symbol: string, cfg: { proximityPct: number; minRangeWidthPct: number; maxRangeWidthPct: number; minTouches: number }, timeframe = '1h') {
   const primaryInterval = timeframe;
   const auxInterval = timeframe === '1h' ? '4h' : '1h';
-  const primaryLimit = timeframe === '1h' ? 120 : 70;
-  const auxLimit = timeframe === '1h' ? 70 : 120;
+  const primaryLimit = timeframe === '1h' ? 240 : 168;
+  const auxLimit = timeframe === '1h' ? 168 : 240;
 
   const candles = await fetchCandles(symbol, primaryInterval, primaryLimit);
   if (candles.length < 30) return null;
@@ -302,7 +302,7 @@ Deno.serve(async (request) => {
       return json({
         symbol: String(body.symbol).toUpperCase(),
         interval: body.interval || '1h',
-        candles: await fetchCandles(String(body.symbol).toUpperCase(), body.interval || '1h', Number(body.limit || 72)),
+        candles: await fetchCandles(String(body.symbol).toUpperCase(), body.interval || '1h', Number(body.limit || 240)),
       });
     }
 

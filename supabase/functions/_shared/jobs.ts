@@ -181,7 +181,7 @@ export async function runScan(admin: any, timeframe: string, mode = 'trend', bia
   const patternDetails = new Map<string, any>();
 
   await runBatches(candidatesForPatterns, Math.max(1, Math.floor(REQUESTS_PER_SECOND / 2)), async (result) => {
-    const candles = await fetchCandles(result.symbol, '1h', 120);
+    const candles = await fetchCandles(result.symbol, '1h', 240);
     const patterns = detectAllPatterns(candles);
     patternDetails.set(result.symbol, patterns);
     patternMap.set(result.symbol, summarizePatterns(patterns));

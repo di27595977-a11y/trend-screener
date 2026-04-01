@@ -99,7 +99,7 @@ app.get('/api/scan/:symbol', async (request, response, next) => {
 app.get('/api/chart/:symbol', async (request, response, next) => {
   try {
     const interval = request.query.interval || '1h';
-    const limit = Number.parseInt(request.query.limit || '72', 10);
+    const limit = Number.parseInt(request.query.limit || '240', 10);
     const candles = await fetchCandles(request.params.symbol.toUpperCase(), interval, limit);
 
     response.json({
