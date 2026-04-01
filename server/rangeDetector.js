@@ -14,7 +14,7 @@ const DEFAULT_RANGE_CONFIG = {
   lookback1h: 120,           // candles for 1H S/R detection
   lookback4h: 70,            // candles for 4H S/R detection
   swingLookback: 3,          // bars for swing point detection
-  clusterTolerance: 0.005,   // 0.5% clustering tolerance
+  clusterTolerance: 0.015,   // 1.5% clustering tolerance
 };
 
 // ─── Technical Helpers ───────────────────────────────────────────────────────
@@ -115,7 +115,8 @@ function clusterPoints(points, tolerance) {
 
     for (let j = i + 1; j < points.length; j++) {
       if (used.has(j)) continue;
-      if (Math.abs(points[j].price - points[i].price) / points[i].price <= tolerance) {
+      const clusterAvg = cluster.reduce((s, p) => s + p.price, 0) / cluster.length;
+      if (Math.abs(points[j].price - clusterAvg) / clusterAvg <= tolerance) {
         cluster.push(points[j]);
         used.add(j);
       }

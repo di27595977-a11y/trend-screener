@@ -84,7 +84,8 @@ function clusterPoints(points, tolerance) {
         continue;
       }
 
-      const priceDistance = Math.abs(points[compareIndex].price - points[index].price) / points[index].price;
+      const clusterAvg = cluster.reduce((sum, point) => sum + point.price, 0) / cluster.length;
+      const priceDistance = Math.abs(points[compareIndex].price - clusterAvg) / clusterAvg;
 
       if (priceDistance <= tolerance) {
         cluster.push(points[compareIndex]);
@@ -363,24 +364,57 @@ function buildHarmonicCandidate(points, candles) {
   return candidates.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
-export function detectSupportResistance(swingHighs, swingLows, tolerance = 0.005) {
+export function detectSupportResistance(swingHighs, swingLows, tolerance = 0.015) {
   const levels = [];
 
   clusterPoints(swingHighs, tolerance).forEach((cluster) => {
     if (cluster.length >= 2) {
-      const avgPrice = cluster.reduce((sum, point) => sum + point.price, 0) / cluster.length;
-      levels.push({ price: avgPrice, type: 'resistance', touches: cluster.length, points: cluster });
+      const prices = cluster.map((point) => point.price);
+      const avgPrice = prices.reduce((sum, value) => sum + value, 0) / prices.length;
+      levels.push({
+        price: avgPrice,
+        priceHigh: Math.max(...prices),
+        priceLow: Math.min(...prices),
+        type: 'resistance',
+        touches: cluster.length,
+        points: cluster,
+        strength: cluster.length >= 3 ? 'strong' : 'normal',
+        flipped: false,
+      });
     }
   });
 
   clusterPoints(swingLows, tolerance).forEach((cluster) => {
     if (cluster.length >= 2) {
-      const avgPrice = cluster.reduce((sum, point) => sum + point.price, 0) / cluster.length;
-      levels.push({ price: avgPrice, type: 'support', touches: cluster.length, points: cluster });
+      const prices = cluster.map((point) => point.price);
+      const avgPrice = prices.reduce((sum, value) => sum + value, 0) / prices.length;
+      levels.push({
+        price: avgPrice,
+        priceHigh: Math.max(...prices),
+        priceLow: Math.min(...prices),
+        type: 'support',
+        touches: cluster.length,
+        points: cluster,
+        strength: cluster.length >= 3 ? 'strong' : 'normal',
+        flipped: false,
+      });
     }
   });
 
   return levels.sort((left, right) => right.touches - left.touches).slice(0, 6);
+}
+
+export function applySRFlip(levels, currentClose, flipTolerance = 0.005) {
+  return levels.map((level) => {
+    const { priceHigh, priceLow, type } = level;
+    if (type === 'resistance' && currentClose > priceHigh * (1 + flipTolerance)) {
+      return { ...level, type: 'support', flipped: true };
+    }
+    if (type === 'support' && currentClose < priceLow * (1 - flipTolerance)) {
+      return { ...level, type: 'resistance', flipped: true };
+    }
+    return { ...level, flipped: false };
+  });
 }
 
 export function fitLine(points) {
@@ -403,6 +437,24 @@ export function fitLine(points) {
   return { slope, intercept, points };
 }
 
+export function fitPivotLine(points) {
+  if (points.length < 2) {
+    return null;
+  }
+
+  const p1 = points.at(-2);
+  const p2 = points.at(-1);
+
+  if (p2.index === p1.index) {
+    return null;
+  }
+
+  const slope = (p2.price - p1.price) / (p2.index - p1.index);
+  const intercept = p1.price - slope * p1.index;
+
+  return { slope, intercept, p1, p2, points };
+}
+
 export function detectTriangle(swingHighs, swingLows, totalBars) {
   if (swingHighs.length < 2 || swingLows.length < 2) {
     return null;
@@ -410,14 +462,14 @@ export function detectTriangle(swingHighs, swingLows, totalBars) {
 
   const recentHighs = swingHighs.slice(-4);
   const recentLows = swingLows.slice(-4);
-  const highLine = fitLine(recentHighs);
-  const lowLine = fitLine(recentLows);
+  const highLine = fitPivotLine(recentHighs);
+  const lowLine = fitPivotLine(recentLows);
 
-  if (highLine.slope > lowLine.slope) {
+  if (!highLine || !lowLine) {
     return null;
   }
 
-  if (highLine.slope === lowLine.slope) {
+  if (highLine.slope > lowLine.slope || highLine.slope === lowLine.slope) {
     return null;
   }
 
@@ -618,8 +670,12 @@ export function detectAllPatterns(candles, options = {}) {
     maxPatterns: maxHarmonicPatterns,
   });
 
+  const rawLevels = detectSupportResistance(swingHighs, swingLows, tolerance);
+  const currentClose = candles.at(-1)?.close ?? 0;
+  const supportResistance = applySRFlip(rawLevels, currentClose);
+
   return {
-    supportResistance: detectSupportResistance(swingHighs, swingLows, tolerance),
+    supportResistance,
     triangle: detectTriangle(swingHighs, swingLows, candles.length),
     harmonics,
     harmonic: harmonics[0] ?? null,

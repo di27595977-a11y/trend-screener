@@ -433,23 +433,51 @@ class PatternRenderer {
     }
 
     supportResistance?.forEach((level) => {
-      const y = this.series.priceToCoordinate(level.price);
+      const yMid = this.series.priceToCoordinate(level.price);
+      const yHigh = this.series.priceToCoordinate(level.priceHigh ?? level.price);
+      const yLow = this.series.priceToCoordinate(level.priceLow ?? level.price);
 
-      if (y == null) {
+      if (yMid == null) {
         return;
       }
 
       const color = level.type === 'resistance' ? '#fb7185' : '#34d399';
-      const label = `${level.type === 'resistance' ? '\u58d3\u529b' : '\u652f\u6490'} ${level.price.toPrecision(6)} \u00d7${level.touches}`;
+      const flipLabel = level.flipped ? ' \u21c5' : '';
+      const strengthLabel = level.strength === 'strong' ? ' \u2588' : '';
+      const label = `${level.type === 'resistance' ? '\u58d3\u529b' : '\u652f\u6490'} ${level.price.toPrecision(6)} \u00d7${level.touches}${strengthLabel}${flipLabel}`;
+
+      // Draw band (zone between priceHigh and priceLow)
+      if (yHigh != null && yLow != null && yHigh !== yLow) {
+        const bandTop = Math.min(yHigh, yLow);
+        const bandHeight = Math.max(Math.abs(yHigh - yLow), 2);
+        const alpha = level.strength === 'strong' ? '40' : '1a';
+        ctx.fillStyle = `${color}${alpha}`;
+        ctx.fillRect(0, bandTop, width, bandHeight);
+
+        // Flipped: draw diagonal hatching
+        if (level.flipped) {
+          ctx.strokeStyle = `${color}30`;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([]);
+          for (let hx = -bandHeight; hx < width; hx += 12) {
+            ctx.beginPath();
+            ctx.moveTo(hx, bandTop + bandHeight);
+            ctx.lineTo(hx + bandHeight, bandTop);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Draw center line
       ctx.strokeStyle = `${color}cc`;
-      ctx.lineWidth = Math.min(level.touches, 3);
-      ctx.setLineDash([7, 4]);
+      ctx.lineWidth = level.strength === 'strong' ? 2.5 : 1.5;
+      ctx.setLineDash(level.flipped ? [4, 6] : [7, 4]);
       ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
+      ctx.moveTo(0, yMid);
+      ctx.lineTo(width, yMid);
       ctx.stroke();
       ctx.setLineDash([]);
-      this.drawText(label, 12, y - 6, color);
+      this.drawText(label, 12, yMid - 6, color);
     });
 
     if (triangle) {

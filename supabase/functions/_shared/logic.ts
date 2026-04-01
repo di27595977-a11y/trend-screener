@@ -236,7 +236,8 @@ function clusterPoints(points: SwingPoint[], tolerance: number) {
 
     for (let compareIndex = index + 1; compareIndex < points.length; compareIndex += 1) {
       if (used.has(compareIndex)) continue;
-      const distance = Math.abs(points[compareIndex].price - points[index].price) / points[index].price;
+      const clusterAvg = cluster.reduce((sum, point) => sum + point.price, 0) / cluster.length;
+      const distance = Math.abs(points[compareIndex].price - clusterAvg) / clusterAvg;
       if (distance <= tolerance) {
         cluster.push(points[compareIndex]);
         used.add(compareIndex);
@@ -327,25 +328,35 @@ export function findSwingPoints(candles: Candle[], lookback = 3) {
   return { swingHighs, swingLows };
 }
 
-function detectSupportResistance(swingHighs: SwingPoint[], swingLows: SwingPoint[], tolerance = 0.005) {
-  const levels: Array<{ price: number; type: 'resistance' | 'support'; touches: number }> = [];
+function detectSupportResistance(swingHighs: SwingPoint[], swingLows: SwingPoint[], tolerance = 0.015) {
+  const levels: Array<{ price: number; priceHigh: number; priceLow: number; type: 'resistance' | 'support'; touches: number; strength: string; flipped: boolean }> = [];
 
   clusterPoints(swingHighs, tolerance).forEach((cluster) => {
     if (cluster.length >= 2) {
+      const prices = cluster.map((p) => p.price);
       levels.push({
-        price: cluster.reduce((sum, point) => sum + point.price, 0) / cluster.length,
+        price: prices.reduce((s, v) => s + v, 0) / prices.length,
+        priceHigh: Math.max(...prices),
+        priceLow: Math.min(...prices),
         type: 'resistance',
         touches: cluster.length,
+        strength: cluster.length >= 3 ? 'strong' : 'normal',
+        flipped: false,
       });
     }
   });
 
   clusterPoints(swingLows, tolerance).forEach((cluster) => {
     if (cluster.length >= 2) {
+      const prices = cluster.map((p) => p.price);
       levels.push({
-        price: cluster.reduce((sum, point) => sum + point.price, 0) / cluster.length,
+        price: prices.reduce((s, v) => s + v, 0) / prices.length,
+        priceHigh: Math.max(...prices),
+        priceLow: Math.min(...prices),
         type: 'support',
         touches: cluster.length,
+        strength: cluster.length >= 3 ? 'strong' : 'normal',
+        flipped: false,
       });
     }
   });
@@ -369,14 +380,25 @@ function fitLine(points: SwingPoint[]) {
   return { slope, intercept };
 }
 
+function fitPivotLine(points: SwingPoint[]) {
+  if (points.length < 2) return null;
+  const p1 = points.at(-2)!;
+  const p2 = points.at(-1)!;
+  if (p2.index === p1.index) return null;
+  const slope = (p2.price - p1.price) / (p2.index - p1.index);
+  const intercept = p1.price - slope * p1.index;
+  return { slope, intercept };
+}
+
 function detectTriangle(swingHighs: SwingPoint[], swingLows: SwingPoint[], totalBars: number) {
   if (swingHighs.length < 2 || swingLows.length < 2) return null;
 
   const recentHighs = swingHighs.slice(-4);
   const recentLows = swingLows.slice(-4);
-  const highLine = fitLine(recentHighs);
-  const lowLine = fitLine(recentLows);
+  const highLine = fitPivotLine(recentHighs);
+  const lowLine = fitPivotLine(recentLows);
 
+  if (!highLine || !lowLine) return null;
   if (highLine.slope > lowLine.slope || highLine.slope === lowLine.slope) return null;
 
   const apexIndex = (lowLine.intercept - highLine.intercept) / (highLine.slope - lowLine.slope);
@@ -579,11 +601,25 @@ function detectMTop(swingHighs: SwingPoint[], swingLows: SwingPoint[], candles: 
   return patterns.sort((left, right) => right.confidence - left.confidence)[0] ?? null;
 }
 
+function applySRFlip(levels: ReturnType<typeof detectSupportResistance>, currentClose: number, flipTolerance = 0.005) {
+  return levels.map((level) => {
+    if (level.type === 'resistance' && currentClose > level.priceHigh * (1 + flipTolerance)) {
+      return { ...level, type: 'support' as const, flipped: true };
+    }
+    if (level.type === 'support' && currentClose < level.priceLow * (1 - flipTolerance)) {
+      return { ...level, type: 'resistance' as const, flipped: true };
+    }
+    return { ...level, flipped: false };
+  });
+}
+
 export function detectAllPatterns(candles: Candle[]) {
   const { swingHighs, swingLows } = findSwingPoints(candles, 3);
   const harmonics = detectHarmonicPatterns(swingHighs, swingLows, candles);
+  const rawLevels = detectSupportResistance(swingHighs, swingLows);
+  const currentClose = candles.at(-1)?.close ?? 0;
   return {
-    supportResistance: detectSupportResistance(swingHighs, swingLows),
+    supportResistance: applySRFlip(rawLevels, currentClose),
     triangle: detectTriangle(swingHighs, swingLows, candles.length),
     harmonics,
     harmonic: harmonics[0] ?? null,

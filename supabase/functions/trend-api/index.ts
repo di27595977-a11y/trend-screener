@@ -24,7 +24,8 @@ function clusterPointsRange(points: Array<{ index: number; price: number; time: 
     used.add(i);
     for (let j = i + 1; j < points.length; j++) {
       if (used.has(j)) continue;
-      if (Math.abs(points[j].price - points[i].price) / points[i].price <= tolerance) {
+      const clusterAvg = cluster.reduce((s, p) => s + p.price, 0) / cluster.length;
+      if (Math.abs(points[j].price - clusterAvg) / clusterAvg <= tolerance) {
         cluster.push(points[j]);
         used.add(j);
       }
@@ -34,7 +35,7 @@ function clusterPointsRange(points: Array<{ index: number; price: number; time: 
   return clusters;
 }
 
-function detectSR(candles: Candle[], minTouches = 2, tolerance = 0.005) {
+function detectSR(candles: Candle[], minTouches = 2, tolerance = 0.015) {
   const { swingHighs, swingLows } = findSwingPoints(candles, 3);
   const levels: Array<{ price: number; type: string; touches: number }> = [];
   clusterPointsRange(swingHighs, tolerance).forEach((c) => {
