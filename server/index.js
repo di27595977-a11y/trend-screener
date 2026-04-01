@@ -154,9 +154,10 @@ app.get('/api/range/signals', (_request, response) => {
   });
 });
 
-app.post('/api/range/scan', (_request, response) => {
+app.post('/api/range/scan', (request, response) => {
+  const timeframe = request.body?.timeframe || '1h';
   rangeDetector
-    .scan()
+    .scan(timeframe)
     .then((signals) => notifyRangeSignals(signals, rangeDetector))
     .catch((error) => console.error('[Range] Manual scan failed:', error.message));
 

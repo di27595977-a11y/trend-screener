@@ -72,6 +72,7 @@ function SignalCard({ signal, onSelect }) {
 
 export default function RangeSignalsPage() {
   const navigate = useNavigate();
+  const [timeframe, setTimeframe] = useState('1h');
   const [data, setData] = useState({ signals: [], lastScanAt: null, config: {}, telegramConfigured: false });
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
@@ -82,7 +83,7 @@ export default function RangeSignalsPage() {
   const load = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const result = await getRangeSignals();
+      const result = await getRangeSignals({ timeframe });
       setData(result);
       setConfigDraft(result.config || {});
     } catch { /* silent */ }
@@ -93,7 +94,7 @@ export default function RangeSignalsPage() {
     load(true);
     const timer = setInterval(() => load(false), 60_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [timeframe]);
 
   const handleScan = async () => {
     setScanning(true);
@@ -139,7 +140,23 @@ export default function RangeSignalsPage() {
               掃描前 80 大市值幣，當價格觸及 1H K 線壓力/支撐位時產生訊號，4H 作為輔助確認。
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex rounded-xl border border-white/15 overflow-hidden">
+              {['1h', '4h'].map((tf) => (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={() => setTimeframe(tf)}
+                  className={`px-4 py-2 text-sm font-medium transition ${
+                    timeframe === tf
+                      ? 'bg-amber-400/20 text-amber-200'
+                      : 'bg-white/5 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {tf.toUpperCase()}
+                </button>
+              ))}
+            </div>
             <button
               type="button"
               onClick={() => setShowConfig(!showConfig)}

@@ -94,16 +94,21 @@ async function fetchTop30Symbols() {
     .map((t) => t.symbol);
 }
 
-async function analyzeRangeSymbol(symbol: string, cfg: { proximityPct: number; minRangeWidthPct: number; maxRangeWidthPct: number; minTouches: number }) {
-  const candles1h = await fetchCandles(symbol, '1h', 120);
-  if (candles1h.length < 30) return null;
+async function analyzeRangeSymbol(symbol: string, cfg: { proximityPct: number; minRangeWidthPct: number; maxRangeWidthPct: number; minTouches: number }, timeframe = '1h') {
+  const primaryInterval = timeframe;
+  const auxInterval = timeframe === '1h' ? '4h' : '1h';
+  const primaryLimit = timeframe === '1h' ? 120 : 70;
+  const auxLimit = timeframe === '1h' ? 70 : 120;
 
-  const currentPrice = candles1h[candles1h.length - 1].close;
-  const levels1h = detectSR(candles1h, cfg.minTouches);
-  if (levels1h.length < 2) return null;
+  const candles = await fetchCandles(symbol, primaryInterval, primaryLimit);
+  if (candles.length < 30) return null;
 
-  const resistances = levels1h.filter((l) => l.type === 'resistance' && l.price > currentPrice);
-  const supports = levels1h.filter((l) => l.type === 'support' && l.price < currentPrice);
+  const currentPrice = candles[candles.length - 1].close;
+  const levels = detectSR(candles, cfg.minTouches);
+  if (levels.length < 2) return null;
+
+  const resistances = levels.filter((l) => l.type === 'resistance' && l.price > currentPrice);
+  const supports = levels.filter((l) => l.type === 'support' && l.price < currentPrice);
   if (!resistances.length && !supports.length) return null;
 
   const nearestRes = resistances.sort((a, b) => a.price - b.price)[0] || null;
@@ -128,31 +133,31 @@ async function analyzeRangeSymbol(symbol: string, cfg: { proximityPct: number; m
   }
   if (!signalSide) return null;
 
-  const rsi = calcRSI(candles1h);
-  const bbWidth = calcBBWidth(candles1h);
-  const avgVol = candles1h.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
-  const curVol = candles1h.slice(-5).reduce((s, c) => s + c.volume, 0) / 5;
+  const rsi = calcRSI(candles);
+  const bbWidth = calcBBWidth(candles);
+  const avgVol = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
+  const curVol = candles.slice(-5).reduce((s, c) => s + c.volume, 0) / 5;
   const volumeRatio = avgVol > 0 ? curVol / avgVol : 1;
 
-  let has4hConfirm = false;
+  let hasAuxConfirm = false;
   try {
-    const candles4h = await fetchCandles(symbol, '4h', 70);
-    if (candles4h.length >= 20) {
-      const levels4h = detectSR(candles4h, 2);
-      has4hConfirm = levels4h.some((l) => l.type === targetLevel.type && Math.abs(l.price - targetLevel.price) / targetLevel.price < 0.01);
+    const candlesAux = await fetchCandles(symbol, auxInterval, auxLimit);
+    if (candlesAux.length >= 20) {
+      const levelsAux = detectSR(candlesAux, 2);
+      hasAuxConfirm = levelsAux.some((l) => l.type === targetLevel.type && Math.abs(l.price - targetLevel.price) / targetLevel.price < 0.01);
     }
   } catch { /* non-critical */ }
 
-  const score = scoreRangeSignal({ proximity, touches: targetLevel.touches, rsi, signalSide, bbWidth, volumeRatio, has4hConfirm });
+  const score = scoreRangeSignal({ proximity, touches: targetLevel.touches, rsi, signalSide, bbWidth, volumeRatio, has4hConfirm: hasAuxConfirm });
 
   return {
-    symbol, signalSide, score, currentPrice,
+    symbol, signalSide, score, currentPrice, timeframe: primaryInterval,
     targetLevel: { price: targetLevel.price, type: targetLevel.type, touches: targetLevel.touches },
     proximity: Math.round(proximity * 1000) / 1000,
     rsi: Math.round(rsi * 10) / 10,
     bbWidth: bbWidth != null ? Math.round(bbWidth * 100) / 100 : null,
     volumeRatio: Math.round(volumeRatio * 100) / 100,
-    has4hConfirm,
+    has4hConfirm: hasAuxConfirm,
     nearestSupport: nearestSup ? { price: nearestSup.price, touches: nearestSup.touches } : null,
     nearestResistance: nearestRes ? { price: nearestRes.price, touches: nearestRes.touches } : null,
     detectedAt: new Date().toISOString(),
@@ -429,6 +434,7 @@ Deno.serve(async (request) => {
     }
 
     if (action === 'range-signals') {
+      const tf = body.timeframe === '4h' ? '4h' : '1h';
       const cfg = {
         proximityPct: Number(body.proximityPct) || 0.3,
         minRangeWidthPct: Number(body.minRangeWidthPct) || 1.0,
@@ -442,7 +448,7 @@ Deno.serve(async (request) => {
       // Process in batches of 3 to respect rate limits
       for (let i = 0; i < symbols.length; i += 3) {
         const batch = symbols.slice(i, i + 3);
-        const results = await Promise.all(batch.map((sym) => analyzeRangeSymbol(sym, cfg).catch(() => null)));
+        const results = await Promise.all(batch.map((sym) => analyzeRangeSymbol(sym, cfg, tf).catch(() => null)));
         signals.push(...results.filter(Boolean));
         if (i + 3 < symbols.length) await new Promise((r) => setTimeout(r, 1000));
       }

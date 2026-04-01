@@ -224,20 +224,20 @@ export class RangeDetector {
     this.cooldowns.set(symbol, Date.now());
   }
 
-  async scan() {
+  async scan(timeframe = '1h') {
     const cfg = this.config;
     const startedAt = Date.now();
 
     // 1. Get target symbols
     const symbols = cfg.top30Only ? await fetchTop30Symbols() : await fetchTradableSymbols();
-    this.logger.log(`[Range] Scanning ${symbols.length} symbols...`);
+    this.logger.log(`[Range] Scanning ${symbols.length} symbols on ${timeframe}...`);
 
     const signals = [];
     const batchSize = 3;
 
     for (let i = 0; i < symbols.length; i += batchSize) {
       const batch = symbols.slice(i, i + batchSize);
-      const batchResults = await Promise.all(batch.map((sym) => this._analyzeSymbol(sym, cfg)));
+      const batchResults = await Promise.all(batch.map((sym) => this._analyzeSymbol(sym, cfg, timeframe)));
       signals.push(...batchResults.filter(Boolean));
 
       if (i + batchSize < symbols.length) {
@@ -254,20 +254,25 @@ export class RangeDetector {
     return signals;
   }
 
-  async _analyzeSymbol(symbol, cfg) {
+  async _analyzeSymbol(symbol, cfg, timeframe = '1h') {
     try {
-      // Fetch 1H candles (primary)
-      const candles1h = await fetchCandles(symbol, '1h', cfg.lookback1h);
-      if (candles1h.length < 30) return null;
+      const primaryInterval = timeframe;
+      const auxInterval = timeframe === '1h' ? '4h' : '1h';
+      const primaryLimit = timeframe === '1h' ? cfg.lookback1h : cfg.lookback4h;
+      const auxLimit = timeframe === '1h' ? cfg.lookback4h : cfg.lookback1h;
 
-      const currentPrice = candles1h[candles1h.length - 1].close;
-      const levels1h = detectSupportResistance(candles1h, cfg);
+      // Fetch primary candles
+      const candles = await fetchCandles(symbol, primaryInterval, primaryLimit);
+      if (candles.length < 30) return null;
 
-      if (levels1h.length < 2) return null;
+      const currentPrice = candles[candles.length - 1].close;
+      const levels = detectSupportResistance(candles, cfg);
+
+      if (levels.length < 2) return null;
 
       // Find nearest support and resistance
-      const resistances = levels1h.filter((l) => l.type === 'resistance' && l.price > currentPrice);
-      const supports = levels1h.filter((l) => l.type === 'support' && l.price < currentPrice);
+      const resistances = levels.filter((l) => l.type === 'resistance' && l.price > currentPrice);
+      const supports = levels.filter((l) => l.type === 'support' && l.price < currentPrice);
 
       if (!resistances.length && !supports.length) return null;
 
@@ -301,26 +306,25 @@ export class RangeDetector {
       if (!signalSide) return null;
 
       // Calculate indicators
-      const rsi = calcRSI(candles1h);
-      const bbWidth = calcBollingerWidth(candles1h);
-      const atr = calcATR(candles1h);
-      const recentVolumes = candles1h.slice(-5).map((c) => c.volume);
-      const avgVol = candles1h.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
+      const rsi = calcRSI(candles);
+      const bbWidth = calcBollingerWidth(candles);
+      const atr = calcATR(candles);
+      const recentVolumes = candles.slice(-5).map((c) => c.volume);
+      const avgVol = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
       const currentVol = recentVolumes.reduce((s, v) => s + v, 0) / recentVolumes.length;
       const volumeRatio = avgVol > 0 ? currentVol / avgVol : 1;
 
-      // 4H confirmation: fetch 4H candles and check if same level exists
-      let has4hConfirm = false;
-      let levels4h = [];
+      // Auxiliary timeframe confirmation
+      let hasAuxConfirm = false;
+      let levelsAux = [];
       try {
-        const candles4h = await fetchCandles(symbol, '4h', cfg.lookback4h);
-        if (candles4h.length >= 20) {
-          levels4h = detectSupportResistance(candles4h, cfg);
-          // Check if 4H has a level within 1% of the 1H level
-          has4hConfirm = levels4h.some(
-            (l4) =>
-              l4.type === targetLevel.type &&
-              Math.abs(l4.price - targetLevel.price) / targetLevel.price < 0.01,
+        const candlesAux = await fetchCandles(symbol, auxInterval, auxLimit);
+        if (candlesAux.length >= 20) {
+          levelsAux = detectSupportResistance(candlesAux, cfg);
+          hasAuxConfirm = levelsAux.some(
+            (l) =>
+              l.type === targetLevel.type &&
+              Math.abs(l.price - targetLevel.price) / targetLevel.price < 0.01,
           );
         }
       } catch {
@@ -334,7 +338,7 @@ export class RangeDetector {
         signalSide,
         bbWidth,
         volumeRatio,
-        has4hConfirm,
+        has4hConfirm: hasAuxConfirm,
       });
 
       return {
@@ -342,6 +346,7 @@ export class RangeDetector {
         signalSide,
         score,
         currentPrice,
+        timeframe: primaryInterval,
         targetLevel: {
           price: targetLevel.price,
           type: targetLevel.type,
@@ -352,10 +357,10 @@ export class RangeDetector {
         bbWidth: bbWidth != null ? Math.round(bbWidth * 100) / 100 : null,
         atr: Math.round(atr * 100) / 100,
         volumeRatio: Math.round(volumeRatio * 100) / 100,
-        has4hConfirm,
+        has4hConfirm: hasAuxConfirm,
         nearestSupport: nearestSupport ? { price: nearestSupport.price, touches: nearestSupport.touches } : null,
         nearestResistance: nearestResistance ? { price: nearestResistance.price, touches: nearestResistance.touches } : null,
-        levels4h: levels4h.slice(0, 4).map((l) => ({ price: l.price, type: l.type, touches: l.touches })),
+        auxLevels: levelsAux.slice(0, 4).map((l) => ({ price: l.price, type: l.type, touches: l.touches })),
         detectedAt: new Date().toISOString(),
       };
     } catch {
