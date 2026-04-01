@@ -19,7 +19,7 @@ const COPY = {
   change: '\u6f32\u5e45',
   openBinance: '\u5728 Binance \u958b\u555f',
   openTradingView: '\u5728 TradingView \u958b\u555f',
-  loading: '\u6b63\u5728\u8f09\u5165\u904e\u53bb 72 \u6839 1H K \u7dda...',
+  loading: '\u6b63\u5728\u8f09\u5165 K \u7dda\u8cc7\u6599...',
   detectedPatterns: '\u5075\u6e2c\u5230\u7684\u5f62\u614b',
   patternEmpty: '\u7d14\u8da8\u52e2',
   toggles: '\u986f\u793a\u958b\u95dc',
@@ -358,6 +358,7 @@ export default function ChartDetail() {
   const resizeObserverRef = useRef(null);
   const chartReadyRef = useRef(false);
   const shouldRecalculatePatternsRef = useRef(true);
+  const [chartTimeframe, setChartTimeframe] = useState('1h');
   const [candles, setCandles] = useState([]);
   const [overview, setOverview] = useState(initialCoin);
   const [patterns, setPatterns] = useState(null);
@@ -461,7 +462,8 @@ export default function ChartDetail() {
     async function load() {
       try {
         setLoading(true);
-        const [candleResponse, overviewResponse] = await Promise.all([getSymbolCandles(symbol), getSymbolOverview(symbol)]);
+        const candleLimit = chartTimeframe === '4h' ? 70 : 120;
+        const [candleResponse, overviewResponse] = await Promise.all([getSymbolCandles(symbol, { interval: chartTimeframe, limit: candleLimit }), getSymbolOverview(symbol)]);
 
         if (cancelled) {
           return;
@@ -492,7 +494,7 @@ export default function ChartDetail() {
     return () => {
       cancelled = true;
     };
-  }, [initialCoin, setupSide, symbol]);
+  }, [chartTimeframe, initialCoin, setupSide, symbol]);
 
   useEffect(() => {
     if (!candles.length || !candleSeriesRef.current || !volumeSeriesRef.current || !chartRef.current) {
@@ -538,7 +540,7 @@ export default function ChartDetail() {
 
   useEffect(() => {
     const unsubscribe = wsManager.onKlineUpdate((nextSymbol, interval, kline) => {
-      if (nextSymbol !== symbol || interval !== '1h') {
+      if (nextSymbol !== symbol || interval !== chartTimeframe) {
         return;
       }
 
@@ -558,7 +560,8 @@ export default function ChartDetail() {
         }
 
         shouldRecalculatePatternsRef.current = kline.isClosed;
-        return next.slice(-72);
+        const maxCandles = chartTimeframe === '4h' ? 70 : 120;
+        return next.slice(-maxCandles);
       });
     });
 
@@ -632,7 +635,23 @@ export default function ChartDetail() {
             </div>
           </div>
 
-          <div className="grid w-full grid-cols-1 gap-3 sm:flex sm:w-auto sm:flex-wrap">
+          <div className="grid w-full grid-cols-1 gap-3 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+            <div className="flex overflow-hidden rounded-full border border-white/15">
+              {['1h', '4h'].map((tf) => (
+                <button
+                  key={tf}
+                  type="button"
+                  onClick={() => setChartTimeframe(tf)}
+                  className={`px-4 py-2 text-sm font-medium transition ${
+                    chartTimeframe === tf
+                      ? 'bg-emerald-400/20 text-emerald-200'
+                      : 'bg-white/5 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {tf.toUpperCase()}
+                </button>
+              ))}
+            </div>
             <a
               href={buildBinanceChartUrl(symbol)}
               target="_blank"
