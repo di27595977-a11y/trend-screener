@@ -215,6 +215,10 @@ export async function testRangeTelegram() {
   return requestJson('/range/test-telegram', { method: 'POST' });
 }
 
+export async function getSignalScores(timeframe = '1h') {
+  return requestJson(`/signal-scores?timeframe=${timeframe}`);
+}
+
 export function buildBinanceChartUrl(symbol) {
   return `https://www.binance.com/en/futures/${symbol}`;
 }

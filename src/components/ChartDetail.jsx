@@ -5,12 +5,14 @@ import PatternRenderer from './PatternRenderer';
 import PatternTags from './PatternTags';
 import ScoreBadge from './ScoreBadge';
 import TradeAdvicePanel from './TradeAdvicePanel';
-import { buildBinanceChartUrl, buildTradingViewUrl, getSymbolCandles, getSymbolOverview } from '../services/binanceApi';
+import SignalRankPanel from './SignalRankPanel';
+import { buildBinanceChartUrl, buildTradingViewUrl, getSignalScores, getSymbolCandles, getSymbolOverview } from '../services/binanceApi';
 import wsManager from '../services/wsManager';
 import { detectAllPatterns } from '../services/patternDetection';
 import { evaluateTrend, normalizeTradeBias } from '../services/indicators';
 import { calculateTrendScore } from '../utils/scoring';
 import { generateTradeAdvice } from '../lib/tradeAdvisor';
+import { calculateSignalScore } from '../services/signalScore';
 
 const COPY = {
   back: '\u56de\u5230\u5100\u8868\u677f',
@@ -359,6 +361,7 @@ export default function ChartDetail() {
   const chartReadyRef = useRef(false);
   const shouldRecalculatePatternsRef = useRef(true);
   const [chartTimeframe, setChartTimeframe] = useState('1h');
+  const [allSignalScores, setAllSignalScores] = useState([]);
   const [candles, setCandles] = useState([]);
   const [overview, setOverview] = useState(initialCoin);
   const [patterns, setPatterns] = useState(null);
@@ -457,6 +460,12 @@ export default function ChartDetail() {
   }, []);
 
   useEffect(() => {
+    getSignalScores(chartTimeframe)
+      .then((data) => setAllSignalScores(data.scores || []))
+      .catch(() => {});
+  }, [chartTimeframe]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function load() {
@@ -527,6 +536,8 @@ export default function ChartDetail() {
       return null;
     }
 
+    const signalScore = calculateSignalScore(symbol, chartTimeframe, patterns, candles);
+
     return {
       supportResistance: toggles.supportResistance ? patterns.supportResistance : [],
       triangle: toggles.triangle ? patterns.triangle : null,
@@ -535,8 +546,9 @@ export default function ChartDetail() {
       wBottom: toggles.reversals ? patterns.wBottom : null,
       mTop: toggles.reversals ? patterns.mTop : null,
       swingPoints: toggles.swingPoints ? patterns.swingPoints : null,
+      signalScore,
     };
-  }, [patterns, toggles]);
+  }, [candles, chartTimeframe, patterns, symbol, toggles]);
 
   useEffect(() => {
     rendererRef.current?.setPatterns(visiblePatterns);
@@ -812,6 +824,13 @@ export default function ChartDetail() {
           </section>
 
           <TradeAdvicePanel advice={tradeAdvice} currentPrice={livePrice ?? candles.at(-1)?.close ?? null} />
+
+          <SignalRankPanel
+            signals={allSignalScores}
+            onOpenChart={(sym) => {
+              window.location.href = `/chart/${sym}`;
+            }}
+          />
         </div>
       </section>
     </div>

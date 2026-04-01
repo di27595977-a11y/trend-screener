@@ -1,4 +1,5 @@
 import { sendTelegram, isTelegramConfigured, formatRangeSignal } from './telegram.js';
+import { computeSignalScores } from './signalScore.js';
 
 const BOT_TOKEN = () => process.env.TELEGRAM_BOT_TOKEN || '';
 const CHAT_ID = () => process.env.TELEGRAM_CHAT_ID || '';
@@ -68,6 +69,9 @@ const MAIN_BUTTONS = [
   [
     { text: '🔄 重新掃描 1H', callback_data: 'scan_1h' },
     { text: '🔄 重新掃描 4H', callback_data: 'scan_4h' },
+  ],
+  [
+    { text: '🏆 形態評分排行', callback_data: 'signal_scores' },
   ],
 ];
 
@@ -159,6 +163,49 @@ export function startTelegramBot(rangeDetector, { logger = console } = {}) {
             await editMessageText(chatId, msgId, text, MAIN_BUTTONS);
           } else {
             await sendMessageWithButtons(chatId, text, MAIN_BUTTONS);
+          }
+        }
+
+        if (data === 'signal_scores') {
+          await answerCallbackQuery(cb.id, '掃描形態評分中...');
+
+          if (msgId) {
+            await editMessageText(chatId, msgId, '🏆 正在掃描形態評分...', null);
+          }
+
+          try {
+            const tickerData = await fetch(
+              `${process.env.BINANCE_API_BASE || 'https://fapi.binance.com'}/fapi/v1/ticker/24hr`,
+            ).then((r) => r.json());
+            const symbols = tickerData
+              .filter((t) => t.symbol.endsWith('USDT'))
+              .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
+              .slice(0, 50)
+              .map((t) => t.symbol);
+            const scores = await computeSignalScores(symbols, '1h');
+            const top = scores.filter((s) => s.totalScore >= 2).slice(0, 10);
+
+            let text;
+            if (!top.length) {
+              text = '🏆 <b>形態評分排行</b>\n\n目前沒有觸發條件的幣種。';
+            } else {
+              const rows = top.map((s, i) => {
+                const side = s.direction === 'long' ? '🟢' : '🔴';
+                const dir = s.direction === 'long' ? '做多' : '做空';
+                const fire = s.totalScore >= 4 ? ' 🔥' : s.totalScore >= 3 ? ' ⚡' : '';
+                return `${i + 1}. ${side} <b>${s.symbol}</b> ${dir} <b>${s.totalScore.toFixed(1)}</b>${fire}\n   ${s.triggered.join(' · ')}`;
+              });
+              text = `🏆 <b>形態評分排行 (1H)</b>\n\n${rows.join('\n\n')}\n\n⏰ ${new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}`;
+            }
+
+            if (msgId) {
+              await editMessageText(chatId, msgId, text, MAIN_BUTTONS);
+            } else {
+              await sendMessageWithButtons(chatId, text, MAIN_BUTTONS);
+            }
+          } catch (err) {
+            const errText = `❌ 掃描失敗: ${err.message}`;
+            if (msgId) await editMessageText(chatId, msgId, errText, MAIN_BUTTONS);
           }
         }
 

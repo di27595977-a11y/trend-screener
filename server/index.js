@@ -10,8 +10,9 @@ import { trainModel } from './ml/train.js';
 import { computeFeatures, FEATURE_COLUMNS } from './ml/features.js';
 import { fetchSymbolData, collectFeaturesForSymbol } from './ml/dataPipeline.js';
 import { RangeDetector } from './rangeDetector.js';
-import { isTelegramConfigured, notifyRangeSignals, sendTelegram } from './telegram.js';
+import { isTelegramConfigured, notifyRangeSignals, notifySignalScores, sendTelegram } from './telegram.js';
 import { startTelegramBot } from './telegramBot.js';
+import { computeSignalScores } from './signalScore.js';
 
 dotenv.config();
 
@@ -197,6 +198,27 @@ app.post('/api/range/test-telegram', async (_request, response, next) => {
   try {
     const result = await sendTelegram('🧪 Trend Screener 區間偵測 — Telegram 連線測試成功！');
     response.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─── Signal Score API ────────────────────────────────────────────────────────
+
+app.get('/api/signal-scores', async (request, response, next) => {
+  try {
+    const timeframe = request.query.timeframe || '1h';
+    const topN = Number(request.query.topN) || 80;
+    const data = await fetch(
+      `${process.env.BINANCE_API_BASE || 'https://fapi.binance.com'}/fapi/v1/ticker/24hr`,
+    ).then((r) => r.json());
+    const symbols = data
+      .filter((t) => t.symbol.endsWith('USDT'))
+      .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
+      .slice(0, topN)
+      .map((t) => t.symbol);
+    const scores = await computeSignalScores(symbols, timeframe);
+    response.json({ scores, timeframe, scannedAt: new Date().toISOString() });
   } catch (error) {
     next(error);
   }
@@ -391,6 +413,28 @@ app.listen(port, () => {
   setTimeout(runRangeScan, 30_000);
   cron.schedule('*/5 * * * *', runRangeScan);
   console.log(`[Range] Scheduler: every 5min (no auto push), telegram=${isTelegramConfigured()}`);
+
+  // ── Signal Score Cron (push to TG when threshold met) ────────────────────
+  const runSignalScoreScan = async () => {
+    try {
+      const data = await fetch(
+        `${process.env.BINANCE_API_BASE || 'https://fapi.binance.com'}/fapi/v1/ticker/24hr`,
+      ).then((r) => r.json());
+      const symbols = data
+        .filter((t) => t.symbol.endsWith('USDT'))
+        .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
+        .slice(0, 80)
+        .map((t) => t.symbol);
+      const scores = await computeSignalScores(symbols, '1h');
+      if (scores.length) await notifySignalScores(scores);
+    } catch (err) {
+      console.error('[SignalScore] Scan failed:', err.message);
+    }
+  };
+
+  // Run signal score scan every 15 min (less frequent than range scan)
+  setTimeout(runSignalScoreScan, 60_000);
+  cron.schedule('*/15 * * * *', runSignalScoreScan);
 
   // ── Telegram Bot (inline buttons) ────────────────────────────────────────
   startTelegramBot(rangeDetector);

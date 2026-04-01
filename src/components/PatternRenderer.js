@@ -396,7 +396,7 @@ class PatternRenderer {
     const width = this.canvas.width / ratio;
     const height = this.canvas.height / ratio;
     const ctx = this.ctx;
-    const { supportResistance, triangle, harmonics, harmonic, wBottom, mTop, swingPoints } = this.patterns;
+    const { supportResistance, triangle, harmonics, harmonic, wBottom, mTop, swingPoints, signalScore } = this.patterns;
 
     ctx.clearRect(0, 0, width, height);
 
@@ -584,6 +584,39 @@ class PatternRenderer {
       if (mTop.isBreakdown && mTop.targetPrice) {
         this.drawGuideLine(mTop.targetPrice, '#fca5a588', `\u76ee\u6a19 ${mTop.targetPrice.toPrecision(6)}`, 14);
       }
+    }
+
+    // ── Signal Score Label ──────────────────────────────────────────────────
+    if (signalScore && signalScore.totalScore > 0 && signalScore.direction !== 'neutral') {
+      const isLong = signalScore.direction === 'long';
+      const color = isLong ? '#34d399' : '#fb7185';
+      const bgColor = isLong ? '#065f4620' : '#4c051220';
+      const arrow = isLong ? '\u25b2' : '\u25bc';
+      const dirLabel = isLong ? '\u505a\u591a' : '\u505a\u7a7a';
+      const scoreText = `${dirLabel} ${arrow} ${signalScore.totalScore.toFixed(1)}\u5206`;
+
+      const triggered = signalScore.conditions.filter((c) => c.triggered && c.direction === signalScore.direction);
+      const condLabels = triggered.slice(0, 3).map((c) => c.label);
+      if (triggered.length > 3) condLabels.push(`+${triggered.length - 3}`);
+
+      const x = width - 14;
+      const y = 18;
+
+      // Background
+      ctx.font = 'bold 14px JetBrains Mono, monospace';
+      const scoreWidth = ctx.measureText(scoreText).width;
+      this.drawRoundedRect(x - scoreWidth - 20, y - 14, scoreWidth + 28, 24, 10, bgColor, `${color}55`);
+      ctx.fillStyle = color;
+      ctx.textAlign = 'right';
+      ctx.fillText(scoreText, x, y + 2);
+
+      // Condition labels below
+      ctx.font = '11px JetBrains Mono, monospace';
+      ctx.fillStyle = `${color}bb`;
+      condLabels.forEach((label, i) => {
+        ctx.fillText(`\u2022 ${label}`, x, y + 20 + i * 16);
+      });
+      ctx.textAlign = 'left'; // reset
     }
   }
 }

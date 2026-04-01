@@ -72,6 +72,64 @@ export function formatRangeSignal(signal) {
   return lines.join('\n');
 }
 
+// ─── Signal Score Formatter ──────────────────────────────────────────────────
+
+const signalPushHistory = new Map();
+
+export function formatSignalScoreMessage(signal) {
+  const side = signal.direction === 'long' ? '\u505a\u591a \u25b2' : '\u505a\u7a7a \u25bc';
+  const confidence = signal.totalScore >= 4 ? '\u9ad8\u4fe1\u5fc3 \ud83d\udd25' : signal.totalScore >= 3 ? '\u4e2d\u4fe1\u5fc3 \u26a1' : '';
+
+  const lines = [
+    `\ud83d\udcca <b>\u5f62\u614b\u8a0a\u865f\uff5c${signal.symbol} ${signal.timeframe.toUpperCase()}</b>`,
+    '',
+    `\u65b9\u5411\uff1a<b>${side}</b>`,
+    `\u8a55\u5206\uff1a<b>${signal.totalScore.toFixed(1)}</b> / 5.0`,
+    confidence ? `\u4fe1\u5fc3\uff1a${confidence}` : null,
+    '',
+    '\u89f8\u767c\u689d\u4ef6\uff1a',
+    ...signal.triggered.map((t) => `\u2022 ${t}`),
+    '',
+    `\u7576\u524d\u50f9\u683c\uff1a<code>${signal.currentPrice.toPrecision(6)}</code>`,
+    `\u6642\u9593\uff1a${new Date(signal.timestamp).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}`,
+  ].filter((l) => l != null);
+
+  return lines.join('\n');
+}
+
+export async function notifySignalScores(scores, threshold = 3, { logger = console } = {}) {
+  if (!isTelegramConfigured()) return [];
+
+  const sent = [];
+  const now = Date.now();
+  const FOUR_HOURS = 4 * 60 * 60 * 1000;
+
+  // Clean expired entries
+  for (const [key, ts] of signalPushHistory) {
+    if (now - ts > FOUR_HOURS) signalPushHistory.delete(key);
+  }
+
+  for (const signal of scores) {
+    if (signal.totalScore < threshold) continue;
+
+    const pushKey = `${signal.symbol}_${signal.timeframe}_${signal.direction}_${Math.floor(now / FOUR_HOURS)}`;
+    if (signalPushHistory.has(pushKey)) continue;
+
+    const message = formatSignalScoreMessage(signal);
+    const result = await sendTelegram(message);
+
+    if (result.ok) {
+      signalPushHistory.set(pushKey, now);
+      sent.push(signal.symbol);
+      logger.log(`[Telegram] Signal score pushed: ${signal.symbol} ${signal.direction} ${signal.totalScore}`);
+    }
+
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  return sent;
+}
+
 // ─── Batch Notify ────────────────────────────────────────────────────────────
 
 export async function notifyRangeSignals(signals, rangeDetector, { logger = console, ignoreCooldown = false } = {}) {
