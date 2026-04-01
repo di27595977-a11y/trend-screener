@@ -178,6 +178,20 @@ app.put('/api/range/config', (request, response) => {
   response.json(rangeDetector.getConfig());
 });
 
+app.post('/api/range/push-telegram', async (_request, response, next) => {
+  try {
+    const signals = rangeDetector.getSignals();
+    if (!signals.length) {
+      response.json({ ok: false, error: '目前沒有訊號可推播' });
+      return;
+    }
+    const sent = await notifyRangeSignals(signals, rangeDetector, { ignoreCooldown: true });
+    response.json({ ok: true, sent });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/range/test-telegram', async (_request, response, next) => {
   try {
     const result = await sendTelegram('🧪 Trend Screener 區間偵測 — Telegram 連線測試成功！');
@@ -364,23 +378,18 @@ app.listen(port, () => {
   backtestJob.start();
 
   // ── Range Detector Scheduler ─────────────────────────────────────────────
-  // Run range scan every 5 minutes
+  // Scan every 5 minutes (data only, NO auto Telegram push)
   const runRangeScan = async () => {
     try {
-      const signals = await rangeDetector.scan();
-      if (signals.length) {
-        await notifyRangeSignals(signals, rangeDetector);
-      }
+      await rangeDetector.scan();
     } catch (err) {
       console.error('[Range] Scheduled scan failed:', err.message);
     }
   };
 
-  // Initial scan after 30s (let main scan start first)
   setTimeout(runRangeScan, 30_000);
-
   cron.schedule('*/5 * * * *', runRangeScan);
-  console.log(`[Range] Scheduler: every 5min, top30=${rangeDetector.config.top30Only}, telegram=${isTelegramConfigured()}`);
+  console.log(`[Range] Scheduler: every 5min (no auto push), telegram=${isTelegramConfigured()}`);
 
   // ── ML Scheduler ────────────────────────────────────────────────────────
   if (process.env.ENABLE_ML === 'true') {

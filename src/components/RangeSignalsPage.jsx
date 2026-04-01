@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getRangeSignals, triggerRangeScan, updateRangeConfig, testRangeTelegram } from '../services/binanceApi';
+import { getRangeSignals, triggerRangeScan, updateRangeConfig, pushRangeTelegram, testRangeTelegram } from '../services/binanceApi';
 
 function SignalCard({ signal, onSelect }) {
   const isLong = signal.signalSide === 'long';
@@ -76,6 +76,7 @@ export default function RangeSignalsPage() {
   const [data, setData] = useState({ signals: [], lastScanAt: null, config: {}, telegramConfigured: false });
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [pushing, setPushing] = useState(false);
   const [showConfig, setShowConfig] = useState(false);
   const [configDraft, setConfigDraft] = useState({});
   const [topN, setTopN] = useState(80);
@@ -104,11 +105,21 @@ export default function RangeSignalsPage() {
   const handleScan = async () => {
     setScanning(true);
     try {
-      await triggerRangeScan();
-      await new Promise((r) => setTimeout(r, 3000));
-      await load(false);
+      await load(true);
     } catch { /* silent */ }
     setScanning(false);
+  };
+
+  const handlePushTelegram = async () => {
+    setPushing(true);
+    setTelegramMsg('');
+    try {
+      const result = await pushRangeTelegram();
+      setTelegramMsg(result.ok ? `✅ 已推播 ${result.sent?.length || 0} 個訊號` : `❌ ${result.error}`);
+    } catch (err) {
+      setTelegramMsg(`❌ ${err.message}`);
+    }
+    setPushing(false);
   };
 
   const handleSaveConfig = async () => {
@@ -177,14 +188,21 @@ export default function RangeSignalsPage() {
             >
               {scanning ? '掃描中...' : '立即掃描'}
             </button>
+            <button
+              type="button"
+              onClick={handlePushTelegram}
+              disabled={pushing || !data.signals.length}
+              className="rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-sm font-medium text-sky-200 transition hover:bg-sky-400/20 disabled:opacity-50"
+            >
+              {pushing ? '推播中...' : '📤 推播 TG'}
+            </button>
           </div>
         </div>
 
-        {data.lastScanAt && (
+        {(data.lastScanAt || telegramMsg) && (
           <p className="mt-3 text-xs text-slate-500">
-            上次掃描：{new Date(data.lastScanAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })}
-            {' · '}{signals.length} 個訊號
-            {data.telegramConfigured ? ' · Telegram ✓' : ''}
+            {data.lastScanAt && <>上次掃描：{new Date(data.lastScanAt).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' })} · {signals.length} 個訊號</>}
+            {telegramMsg && <> · {telegramMsg}</>}
           </p>
         )}
       </div>

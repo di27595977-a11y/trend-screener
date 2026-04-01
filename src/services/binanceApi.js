@@ -207,6 +207,10 @@ export async function updateRangeConfig(config) {
   });
 }
 
+export async function pushRangeTelegram() {
+  return requestJson('/range/push-telegram', { method: 'POST' });
+}
+
 export async function testRangeTelegram() {
   return requestJson('/range/test-telegram', { method: 'POST' });
 }

@@ -74,7 +74,7 @@ export function formatRangeSignal(signal) {
 
 // ─── Batch Notify ────────────────────────────────────────────────────────────
 
-export async function notifyRangeSignals(signals, rangeDetector, { logger = console } = {}) {
+export async function notifyRangeSignals(signals, rangeDetector, { logger = console, ignoreCooldown = false } = {}) {
   if (!isTelegramConfigured()) {
     logger.log('[Telegram] Not configured, skipping notifications.');
     return [];
@@ -83,7 +83,7 @@ export async function notifyRangeSignals(signals, rangeDetector, { logger = cons
   const sent = [];
 
   for (const signal of signals) {
-    if (rangeDetector.isOnCooldown(signal.symbol)) continue;
+    if (!ignoreCooldown && rangeDetector.isOnCooldown(signal.symbol)) continue;
 
     const message = formatRangeSignal(signal);
     const result = await sendTelegram(message);
