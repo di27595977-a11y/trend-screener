@@ -414,29 +414,7 @@ app.listen(port, () => {
   cron.schedule('*/5 * * * *', runRangeScan);
   console.log(`[Range] Scheduler: every 5min (no auto push), telegram=${isTelegramConfigured()}`);
 
-  // ── Signal Score Cron (push to TG when threshold met) ────────────────────
-  const runSignalScoreScan = async () => {
-    try {
-      const data = await fetch(
-        `${process.env.BINANCE_API_BASE || 'https://fapi.binance.com'}/fapi/v1/ticker/24hr`,
-      ).then((r) => r.json());
-      const symbols = data
-        .filter((t) => t.symbol.endsWith('USDT'))
-        .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
-        .slice(0, 80)
-        .map((t) => t.symbol);
-      const scores = await computeSignalScores(symbols, '1h');
-      if (scores.length) await notifySignalScores(scores);
-    } catch (err) {
-      console.error('[SignalScore] Scan failed:', err.message);
-    }
-  };
-
-  // Run signal score scan every 15 min (less frequent than range scan)
-  setTimeout(runSignalScoreScan, 60_000);
-  cron.schedule('*/15 * * * *', runSignalScoreScan);
-
-  // ── Telegram Bot (inline buttons) ────────────────────────────────────────
+  // ── Telegram Bot (inline buttons, manual push only) ───────────────────────
   startTelegramBot(rangeDetector);
 
   // ── ML Scheduler ────────────────────────────────────────────────────────
