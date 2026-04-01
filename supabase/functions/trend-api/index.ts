@@ -11,6 +11,155 @@ import {
   updateRuntimeSettings,
 } from '../_shared/db.ts';
 import { runBacktest, runScan } from '../_shared/jobs.ts';
+import { findSwingPoints, type Candle } from '../_shared/logic.ts';
+
+// ─── Range Detection Helpers ─────────────────────────────────────────────────
+
+function clusterPointsRange(points: Array<{ index: number; price: number; time: number }>, tolerance: number) {
+  const clusters: Array<Array<{ index: number; price: number; time: number }>> = [];
+  const used = new Set<number>();
+  for (let i = 0; i < points.length; i++) {
+    if (used.has(i)) continue;
+    const cluster = [points[i]];
+    used.add(i);
+    for (let j = i + 1; j < points.length; j++) {
+      if (used.has(j)) continue;
+      if (Math.abs(points[j].price - points[i].price) / points[i].price <= tolerance) {
+        cluster.push(points[j]);
+        used.add(j);
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
+function detectSR(candles: Candle[], minTouches = 2, tolerance = 0.005) {
+  const { swingHighs, swingLows } = findSwingPoints(candles, 3);
+  const levels: Array<{ price: number; type: string; touches: number }> = [];
+  clusterPointsRange(swingHighs, tolerance).forEach((c) => {
+    if (c.length >= minTouches) levels.push({ price: c.reduce((s, p) => s + p.price, 0) / c.length, type: 'resistance', touches: c.length });
+  });
+  clusterPointsRange(swingLows, tolerance).forEach((c) => {
+    if (c.length >= minTouches) levels.push({ price: c.reduce((s, p) => s + p.price, 0) / c.length, type: 'support', touches: c.length });
+  });
+  return levels.sort((a, b) => b.touches - a.touches).slice(0, 6);
+}
+
+function calcRSI(candles: Candle[], period = 14) {
+  if (candles.length < period + 1) return 50;
+  let gainSum = 0, lossSum = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = candles[i].close - candles[i - 1].close;
+    if (d > 0) gainSum += d; else lossSum += Math.abs(d);
+  }
+  let avgGain = gainSum / period, avgLoss = lossSum / period;
+  for (let i = period + 1; i < candles.length; i++) {
+    const d = candles[i].close - candles[i - 1].close;
+    avgGain = (avgGain * (period - 1) + (d > 0 ? d : 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + (d < 0 ? Math.abs(d) : 0)) / period;
+  }
+  if (avgLoss === 0) return 100;
+  return 100 - 100 / (1 + avgGain / avgLoss);
+}
+
+function calcBBWidth(candles: Candle[], period = 20) {
+  if (candles.length < period) return null;
+  const closes = candles.slice(-period).map((c) => c.close);
+  const mean = closes.reduce((s, v) => s + v, 0) / period;
+  const std = Math.sqrt(closes.reduce((s, v) => s + (v - mean) ** 2, 0) / period);
+  return (std / mean) * 100;
+}
+
+function scoreRangeSignal(opts: { proximity: number; touches: number; rsi: number; signalSide: string; bbWidth: number | null; volumeRatio: number; has4hConfirm: boolean }) {
+  let score = 0;
+  score += Math.round(Math.max(0, 30 - (opts.proximity / 0.3) * 20));
+  score += Math.min(opts.touches * 8, 25);
+  if (opts.signalSide === 'short' && opts.rsi > 65) score += Math.min(Math.round((opts.rsi - 65) * 0.6), 20);
+  if (opts.signalSide === 'long' && opts.rsi < 35) score += Math.min(Math.round((35 - opts.rsi) * 0.6), 20);
+  if (opts.signalSide === 'short' && opts.rsi >= 50 && opts.rsi <= 65) score += 5;
+  if (opts.signalSide === 'long' && opts.rsi >= 35 && opts.rsi <= 50) score += 5;
+  if (opts.bbWidth != null && opts.bbWidth < 3) score += Math.round(Math.max(0, 10 - opts.bbWidth * 2));
+  if (opts.volumeRatio < 1.2) score += 5;
+  if (opts.has4hConfirm) score += 10;
+  return Math.min(score, 100);
+}
+
+async function fetchTop30Symbols() {
+  const data: any[] = await requestBinance('/fapi/v1/ticker/24hr', {});
+  return data
+    .filter((t) => t.symbol.endsWith('USDT'))
+    .sort((a, b) => Number(b.quoteVolume) - Number(a.quoteVolume))
+    .slice(0, 30)
+    .map((t) => t.symbol);
+}
+
+async function analyzeRangeSymbol(symbol: string, cfg: { proximityPct: number; minRangeWidthPct: number; maxRangeWidthPct: number; minTouches: number }) {
+  const candles1h = await fetchCandles(symbol, '1h', 72);
+  if (candles1h.length < 30) return null;
+
+  const currentPrice = candles1h[candles1h.length - 1].close;
+  const levels1h = detectSR(candles1h, cfg.minTouches);
+  if (levels1h.length < 2) return null;
+
+  const resistances = levels1h.filter((l) => l.type === 'resistance' && l.price > currentPrice);
+  const supports = levels1h.filter((l) => l.type === 'support' && l.price < currentPrice);
+  if (!resistances.length && !supports.length) return null;
+
+  const nearestRes = resistances.sort((a, b) => a.price - b.price)[0] || null;
+  const nearestSup = supports.sort((a, b) => b.price - a.price)[0] || null;
+
+  if (nearestRes && nearestSup) {
+    const rangeWidth = ((nearestRes.price - nearestSup.price) / currentPrice) * 100;
+    if (rangeWidth < cfg.minRangeWidthPct || rangeWidth > cfg.maxRangeWidthPct) return null;
+  }
+
+  const resDist = nearestRes ? ((nearestRes.price - currentPrice) / currentPrice) * 100 : Infinity;
+  const supDist = nearestSup ? ((currentPrice - nearestSup.price) / currentPrice) * 100 : Infinity;
+
+  let signalSide: string | null = null;
+  let targetLevel: any = null;
+  let proximity = 0;
+
+  if (resDist <= cfg.proximityPct && resDist <= supDist) {
+    signalSide = 'short'; targetLevel = nearestRes; proximity = resDist;
+  } else if (supDist <= cfg.proximityPct && supDist < resDist) {
+    signalSide = 'long'; targetLevel = nearestSup; proximity = supDist;
+  }
+  if (!signalSide) return null;
+
+  const rsi = calcRSI(candles1h);
+  const bbWidth = calcBBWidth(candles1h);
+  const avgVol = candles1h.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
+  const curVol = candles1h.slice(-5).reduce((s, c) => s + c.volume, 0) / 5;
+  const volumeRatio = avgVol > 0 ? curVol / avgVol : 1;
+
+  let has4hConfirm = false;
+  try {
+    const candles4h = await fetchCandles(symbol, '4h', 72);
+    if (candles4h.length >= 20) {
+      const levels4h = detectSR(candles4h, 2);
+      has4hConfirm = levels4h.some((l) => l.type === targetLevel.type && Math.abs(l.price - targetLevel.price) / targetLevel.price < 0.01);
+    }
+  } catch { /* non-critical */ }
+
+  const score = scoreRangeSignal({ proximity, touches: targetLevel.touches, rsi, signalSide, bbWidth, volumeRatio, has4hConfirm });
+
+  return {
+    symbol, signalSide, score, currentPrice,
+    targetLevel: { price: targetLevel.price, type: targetLevel.type, touches: targetLevel.touches },
+    proximity: Math.round(proximity * 1000) / 1000,
+    rsi: Math.round(rsi * 10) / 10,
+    bbWidth: bbWidth != null ? Math.round(bbWidth * 100) / 100 : null,
+    volumeRatio: Math.round(volumeRatio * 100) / 100,
+    has4hConfirm,
+    nearestSupport: nearestSup ? { price: nearestSup.price, touches: nearestSup.touches } : null,
+    nearestResistance: nearestRes ? { price: nearestRes.price, touches: nearestRes.touches } : null,
+    detectedAt: new Date().toISOString(),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function sortResultsForMode(results: any[], mode = 'trend') {
   return [...results].sort((left, right) => {
@@ -276,6 +425,35 @@ Deno.serve(async (request) => {
           extremeLow:  { long: wr(stats.fundLow.longWin, stats.fundLow.total),   short: wr(stats.fundLow.shortWin, stats.fundLow.total),   sampleCount: stats.fundLow.total,  winRate: wr(stats.fundLow.longWin, stats.fundLow.total)  },
         },
         mlScore: null, mlDirection: null, mlProb: null,
+      });
+    }
+
+    if (action === 'range-signals') {
+      const cfg = {
+        proximityPct: Number(body.proximityPct) || 0.3,
+        minRangeWidthPct: Number(body.minRangeWidthPct) || 1.0,
+        maxRangeWidthPct: Number(body.maxRangeWidthPct) || 8.0,
+        minTouches: Number(body.minTouches) || 2,
+      };
+
+      const symbols = await fetchTop30Symbols();
+      const signals: any[] = [];
+
+      // Process in batches of 3 to respect rate limits
+      for (let i = 0; i < symbols.length; i += 3) {
+        const batch = symbols.slice(i, i + 3);
+        const results = await Promise.all(batch.map((sym) => analyzeRangeSymbol(sym, cfg).catch(() => null)));
+        signals.push(...results.filter(Boolean));
+        if (i + 3 < symbols.length) await new Promise((r) => setTimeout(r, 1000));
+      }
+
+      signals.sort((a, b) => b.score - a.score);
+
+      return json({
+        signals,
+        lastScanAt: new Date().toISOString(),
+        config: cfg,
+        telegramConfigured: false,
       });
     }
 

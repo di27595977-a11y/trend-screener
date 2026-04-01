@@ -184,11 +184,15 @@ export async function triggerMlTrain({ epochs = 50, batchSize = 256 } = {}) {
 
 // ─── Range Detection API ─────────────────────────────────────────────────────
 
-export async function getRangeSignals() {
+export async function getRangeSignals(config = {}) {
+  const data = await invokeTrendApi('range-signals', config);
+  if (data) return data;
   return requestJson('/range/signals');
 }
 
 export async function triggerRangeScan() {
+  const data = await invokeTrendApi('range-signals');
+  if (data) return data;
   return requestJson('/range/scan', { method: 'POST' });
 }
 
