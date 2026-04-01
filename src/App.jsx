@@ -6,6 +6,7 @@ import AlphaSignals from './components/AlphaSignals';
 import WinRateCalculator from './components/WinRateCalculator';
 import CryptoAnalyzer from './components/CryptoAnalyzer';
 import AlertScanner from './components/AlertScanner';
+import RangeSignalsPage from './components/RangeSignalsPage';
 
 const COPY = {
   eyebrow: '趨勢篩選器',
@@ -18,6 +19,7 @@ const COPY = {
   winrate: '勝率計算',
   analyzer: '多空分析',
   alerts: '推播掃描',
+  range: '區間偵測',
 };
 
 function AppNavLink({ to, children, end = false }) {
@@ -62,6 +64,7 @@ function AppShell({ children }) {
             <AppNavLink to="/winrate">{COPY.winrate}</AppNavLink>
             <AppNavLink to="/analyzer">{COPY.analyzer}</AppNavLink>
             <AppNavLink to="/alerts">{COPY.alerts}</AppNavLink>
+            <AppNavLink to="/range">{COPY.range}</AppNavLink>
           </nav>
         </header>
 
@@ -82,6 +85,7 @@ export default function App() {
         <Route path="/winrate" element={<WinRateCalculator />} />
         <Route path="/analyzer" element={<CryptoAnalyzer />} />
         <Route path="/alerts" element={<AlertScanner />} />
+        <Route path="/range" element={<RangeSignalsPage />} />
       </Routes>
     </AppShell>
   );
