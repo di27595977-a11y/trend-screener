@@ -467,23 +467,44 @@ export function detectTriangle(swingHighs, swingLows, totalBars) {
     return null;
   }
 
-  if (highLine.slope > lowLine.slope || highLine.slope === lowLine.slope) {
+  if (highLine.slope >= lowLine.slope) {
     return null;
   }
 
   const apexIndex = (lowLine.intercept - highLine.intercept) / (highLine.slope - lowLine.slope);
   const lastIndex = Math.max(recentHighs.at(-1)?.index ?? 0, recentLows.at(-1)?.index ?? 0);
+  const firstIndex = Math.min(recentHighs.at(-2)?.index ?? 0, recentLows.at(-2)?.index ?? 0);
 
   if (apexIndex <= lastIndex || apexIndex > lastIndex + totalBars * 0.5) {
     return null;
   }
 
-  let type = 'symmetric';
+  // Verify convergence: current gap must be smaller than starting gap
+  const startGap = Math.abs((highLine.slope * firstIndex + highLine.intercept) - (lowLine.slope * firstIndex + lowLine.intercept));
+  const endGap = Math.abs((highLine.slope * lastIndex + highLine.intercept) - (lowLine.slope * lastIndex + lowLine.intercept));
 
-  if (Math.abs(highLine.slope) < 0.0001) {
+  if (endGap >= startGap) {
+    return null;
+  }
+
+  let type;
+  const highDown = highLine.slope < -0.0001;
+  const highFlat = Math.abs(highLine.slope) <= 0.0001;
+  const lowUp = lowLine.slope > 0.0001;
+  const lowFlat = Math.abs(lowLine.slope) <= 0.0001;
+
+  if (highDown && lowUp) {
+    type = 'symmetric';
+  } else if (highFlat && lowUp) {
     type = 'ascending';
-  } else if (Math.abs(lowLine.slope) < 0.0001) {
+  } else if (highDown && lowFlat) {
     type = 'descending';
+  } else if (highLine.slope < 0 && lowLine.slope < 0) {
+    type = 'fallingWedge';
+  } else if (highLine.slope > 0 && lowLine.slope > 0) {
+    type = 'risingWedge';
+  } else {
+    type = 'symmetric';
   }
 
   return {

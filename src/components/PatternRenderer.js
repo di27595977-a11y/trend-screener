@@ -2,6 +2,8 @@ const TRIANGLE_LABELS = {
   ascending: '\u25b2 \u4e0a\u5347\u4e09\u89d2',
   descending: '\u25bd \u4e0b\u964d\u4e09\u89d2',
   symmetric: '\u25c7 \u5c0d\u7a31\u4e09\u89d2',
+  fallingWedge: '\u25bd \u4e0b\u964d\u6954\u5f62',
+  risingWedge: '\u25b2 \u4e0a\u5347\u6954\u5f62',
 };
 
 const HARMONIC_PALETTES = {
