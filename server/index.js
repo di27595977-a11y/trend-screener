@@ -11,6 +11,7 @@ import { computeFeatures, FEATURE_COLUMNS } from './ml/features.js';
 import { fetchSymbolData, collectFeaturesForSymbol } from './ml/dataPipeline.js';
 import { RangeDetector } from './rangeDetector.js';
 import { isTelegramConfigured, notifyRangeSignals, sendTelegram } from './telegram.js';
+import { startTelegramBot } from './telegramBot.js';
 
 dotenv.config();
 
@@ -390,6 +391,9 @@ app.listen(port, () => {
   setTimeout(runRangeScan, 30_000);
   cron.schedule('*/5 * * * *', runRangeScan);
   console.log(`[Range] Scheduler: every 5min (no auto push), telegram=${isTelegramConfigured()}`);
+
+  // ── Telegram Bot (inline buttons) ────────────────────────────────────────
+  startTelegramBot(rangeDetector);
 
   // ── ML Scheduler ────────────────────────────────────────────────────────
   if (process.env.ENABLE_ML === 'true') {
