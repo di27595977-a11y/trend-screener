@@ -503,10 +503,12 @@ export default function ChartDetail() {
 
     candleSeriesRef.current.setData(toCandleSeriesData(candles));
     volumeSeriesRef.current.setData(toVolumeSeriesData(candles));
-    chartRef.current.timeScale().fitContent();
-    chartReadyRef.current = true;
 
-    // Re-render patterns after chart scale update
+    if (!chartReadyRef.current) {
+      chartRef.current.timeScale().fitContent();
+      chartReadyRef.current = true;
+    }
+
     requestAnimationFrame(() => {
       rendererRef.current?.render();
     });
