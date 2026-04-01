@@ -480,33 +480,44 @@ class PatternRenderer {
       this.drawText(label, 12, yMid - 6, color);
     });
 
-    if (triangle) {
+    if (triangle && triangle.highLine && triangle.lowLine) {
+      const visibleRange = this.chart.timeScale().getVisibleLogicalRange();
+      const leftIdx = visibleRange ? Math.floor(visibleRange.from) : 0;
+      const rightIdx = visibleRange ? Math.ceil(visibleRange.to) : 0;
+
+      const drawTrendLine = (line) => {
+        const { slope, intercept, p1, p2 } = line;
+        if (!p1 || !p2 || p1.index === p2.index) return null;
+
+        const timeDelta = (p2.time - p1.time) / (p2.index - p1.index);
+        const leftTime = p1.time + (leftIdx - p1.index) * timeDelta;
+        const rightTime = p1.time + (rightIdx - p1.index) * timeDelta;
+        const leftPrice = slope * leftIdx + intercept;
+        const rightPrice = slope * rightIdx + intercept;
+
+        const start = this.tp(leftTime, leftPrice);
+        const end = this.tp(rightTime, rightPrice);
+
+        if (start.x == null || start.y == null || end.x == null || end.y == null) return null;
+
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+
+        return end;
+      };
+
       ctx.strokeStyle = '#facc15';
       ctx.lineWidth = 2;
 
-      [triangle.upperPoints, triangle.lowerPoints].forEach((points) => {
-        ctx.beginPath();
-        points.forEach((point, index) => {
-          const position = this.tp(point.time, point.price);
-
-          if (position.x == null || position.y == null) {
-            return;
-          }
-
-          if (index === 0) {
-            ctx.moveTo(position.x, position.y);
-          } else {
-            ctx.lineTo(position.x, position.y);
-          }
-        });
-        ctx.stroke();
-      });
+      drawTrendLine(triangle.highLine);
+      const lowEnd = drawTrendLine(triangle.lowLine);
 
       const label = TRIANGLE_LABELS[triangle.type] || '\u4e09\u89d2\u6536\u6582';
-      const anchor = this.tp(triangle.upperPoints[0].time, triangle.upperPoints[0].price);
 
-      if (anchor.x != null && anchor.y != null) {
-        this.drawText(label, anchor.x, anchor.y - 14, '#fde047');
+      if (lowEnd) {
+        this.drawText(label, lowEnd.x + 8, lowEnd.y - 6, '#fde047');
       }
     }
 
