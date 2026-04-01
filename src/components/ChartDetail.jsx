@@ -462,7 +462,7 @@ export default function ChartDetail() {
     async function load() {
       try {
         setLoading(true);
-        const candleLimit = chartTimeframe === '4h' ? 70 : 120;
+        const candleLimit = 120;
         const [candleResponse, overviewResponse] = await Promise.all([getSymbolCandles(symbol, { interval: chartTimeframe, limit: candleLimit }), getSymbolOverview(symbol)]);
 
         if (cancelled) {
@@ -503,11 +503,13 @@ export default function ChartDetail() {
 
     candleSeriesRef.current.setData(toCandleSeriesData(candles));
     volumeSeriesRef.current.setData(toVolumeSeriesData(candles));
+    chartRef.current.timeScale().fitContent();
+    chartReadyRef.current = true;
 
-    if (!chartReadyRef.current) {
-      chartRef.current.timeScale().fitContent();
-      chartReadyRef.current = true;
-    }
+    // Re-render patterns after chart scale update
+    requestAnimationFrame(() => {
+      rendererRef.current?.render();
+    });
   }, [candles]);
 
   const currentMetrics = useMemo(() => {
@@ -560,8 +562,7 @@ export default function ChartDetail() {
         }
 
         shouldRecalculatePatternsRef.current = kline.isClosed;
-        const maxCandles = chartTimeframe === '4h' ? 70 : 120;
-        return next.slice(-maxCandles);
+        return next.slice(-120);
       });
     });
 
