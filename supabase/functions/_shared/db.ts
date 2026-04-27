@@ -110,6 +110,195 @@ export async function updateRuntimeSettings(admin: ReturnType<typeof createAdmin
   return nextSettings;
 }
 
+export async function listAlphaStrategySpecs(admin: ReturnType<typeof createAdminClient>) {
+  const { data, error } = await admin
+    .from('alpha_strategy_specs')
+    .select('file_name, strategy_id, status, enabled, spec, updated_at')
+    .order('updated_at', { ascending: false });
+
+  if (error) throw error;
+
+  const { data: latestJob, error: jobError } = await admin
+    .from('alpha_strategy_apply_jobs')
+    .select('id, requested_at, requested_by, statuses, status, result, applied_at, completed_at')
+    .order('requested_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (jobError) throw jobError;
+
+  const { data: backtestJobs, error: backtestError } = await admin
+    .from('alpha_strategy_backtest_jobs')
+    .select('id, file_name, strategy_id, requested_at, requested_by, status, timeframe, lookback_days, symbol_mode, symbols, top_n, result, error, started_at, completed_at')
+    .order('requested_at', { ascending: false })
+    .limit(100);
+
+  if (backtestError) throw backtestError;
+
+  const latestBacktestByFile = new Map<string, any>();
+  (backtestJobs || []).forEach((row: any) => {
+    if (!row.file_name || latestBacktestByFile.has(row.file_name)) {
+      return;
+    }
+    latestBacktestByFile.set(row.file_name, row);
+  });
+
+  return {
+    provider: 'supabase',
+    root_path: null,
+    spec_dir: 'supabase:alpha_strategy_specs',
+    base_config_path: 'remote-control-plane',
+    candidate_output_path: 'synced-by-alpha-engine',
+    restart_required: false,
+    sync_required: true,
+    latest_apply_job: latestJob || null,
+    strategies: (data || []).map((row: any) => ({
+      file_name: row.file_name,
+      file_path: `supabase:${row.file_name}`,
+      updated_at: row.updated_at,
+      spec: row.spec,
+      latest_backtest_job: latestBacktestByFile.get(row.file_name) || null,
+    })),
+  };
+}
+
+export async function saveAlphaStrategySpec(
+  admin: ReturnType<typeof createAdminClient>,
+  fileName: string,
+  spec: Record<string, unknown>,
+) {
+  if (!fileName || typeof fileName !== 'string') {
+    throw new Error('fileName is required');
+  }
+  if (!spec?.strategy_id || typeof spec.strategy_id !== 'string') {
+    throw new Error('spec.strategy_id is required');
+  }
+
+  const { error } = await admin.from('alpha_strategy_specs').upsert({
+    file_name: fileName,
+    strategy_id: spec.strategy_id,
+    status: spec.status || 'candidate',
+    enabled: spec.enabled !== false,
+    spec,
+    updated_at: new Date().toISOString(),
+  });
+
+  if (error) throw error;
+
+  return {
+    provider: 'supabase',
+    sync_required: true,
+    saved: true,
+    strategy: {
+      file_name: fileName,
+      file_path: `supabase:${fileName}`,
+      spec,
+    },
+  };
+}
+
+export async function queueAlphaStrategyApply(
+  admin: ReturnType<typeof createAdminClient>,
+  requestedBy = 'trend-api',
+) {
+  const { data: strategies, error: readError } = await admin
+    .from('alpha_strategy_specs')
+    .select('strategy_id, status, enabled')
+    .eq('status', 'candidate');
+
+  if (readError) throw readError;
+
+  const candidateStrategies = (strategies || []).filter((row: any) => row.enabled !== false);
+  const requestedAt = new Date().toISOString();
+  const { data: job, error: writeError } = await admin
+    .from('alpha_strategy_apply_jobs')
+    .insert({
+      requested_at: requestedAt,
+      requested_by: requestedBy,
+      statuses: ['candidate'],
+      status: 'pending',
+      result: {
+        strategy_count: candidateStrategies.length,
+        strategies: candidateStrategies.map((row: any) => row.strategy_id),
+      },
+    })
+    .select('id, requested_at, status, statuses, result')
+    .single();
+
+  if (writeError) throw writeError;
+
+  return {
+    provider: 'supabase',
+    applied: true,
+    queued: true,
+    restart_required: false,
+    sync_required: true,
+    strategy_count: candidateStrategies.length,
+    strategies: candidateStrategies.map((row: any) => row.strategy_id),
+    job,
+  };
+}
+
+export async function queueAlphaStrategyBacktest(
+  admin: ReturnType<typeof createAdminClient>,
+  fileName: string,
+  requestedBy = 'trend-api',
+) {
+  const { data: row, error: readError } = await admin
+    .from('alpha_strategy_specs')
+    .select('file_name, strategy_id, spec')
+    .eq('file_name', fileName)
+    .maybeSingle();
+
+  if (readError) throw readError;
+  if (!row?.spec) {
+    throw new Error(`Strategy not found: ${fileName}`);
+  }
+
+  const backtest = typeof row.spec.backtest === 'object' && row.spec.backtest ? row.spec.backtest : {};
+  const symbolMode = String(backtest.symbol_mode || 'top_n');
+  const manualSymbols = Array.isArray(backtest.symbols) ? backtest.symbols.map((item: any) => String(item).trim().toUpperCase()).filter(Boolean) : [];
+  const topN = Number(backtest.top_n || 20);
+  const lookbackDays = Number(backtest.lookback_days || 60);
+  const timeframe = String(backtest.timeframe || row.spec.timeframes?.trigger || '15m');
+
+  const { data: job, error: writeError } = await admin
+    .from('alpha_strategy_backtest_jobs')
+    .insert({
+      file_name: row.file_name,
+      strategy_id: row.strategy_id,
+      spec: row.spec,
+      requested_at: new Date().toISOString(),
+      requested_by: requestedBy,
+      status: 'pending',
+      timeframe,
+      lookback_days: lookbackDays,
+      symbol_mode: symbolMode,
+      symbols: manualSymbols,
+      top_n: topN,
+      result: {
+        strategy_id: row.strategy_id,
+        timeframe,
+        lookback_days: lookbackDays,
+        symbol_mode: symbolMode,
+        symbols: manualSymbols,
+        top_n: topN,
+      },
+    })
+    .select('id, file_name, strategy_id, requested_at, requested_by, status, timeframe, lookback_days, symbol_mode, symbols, top_n, result, error, started_at, completed_at')
+    .single();
+
+  if (writeError) throw writeError;
+
+  return {
+    provider: 'supabase',
+    queued: true,
+    completed: false,
+    sync_required: true,
+    job,
+  };
+}
+
 export async function recordScan(
   admin: ReturnType<typeof createAdminClient>,
   payload: {

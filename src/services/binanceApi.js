@@ -165,6 +165,37 @@ export async function getBacktestReport({ timeframe = '1h', days = 30 } = {}) {
   return requestJson(`/backtest/report?${params.toString()}`);
 }
 
+export async function getAlphaStrategies() {
+  const data = await invokeTrendApi('alpha-strategies-list');
+  if (data) return data;
+  return requestJson('/alpha-strategies');
+}
+
+export async function saveAlphaStrategy(fileName, spec) {
+  const data = await invokeTrendApi('save-alpha-strategy', { fileName, spec });
+  if (data) return data;
+  return requestJson(`/alpha-strategies/${encodeURIComponent(fileName)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ spec }),
+  });
+}
+
+export async function applyAlphaStrategies() {
+  const data = await invokeTrendApi('apply-alpha-strategies');
+  if (data) return data;
+  return requestJson('/alpha-strategies/apply', {
+    method: 'POST',
+  });
+}
+
+export async function runAlphaStrategyBacktest(fileName) {
+  const data = await invokeTrendApi('run-alpha-strategy-backtest', { fileName });
+  if (data) return data;
+  return requestJson(`/alpha-strategies/${encodeURIComponent(fileName)}/backtest`, {
+    method: 'POST',
+  });
+}
+
 export async function getWinRate(symbol, hours) {
   const data = await invokeTrendApi('winrate', { symbol: symbol.toUpperCase(), hours });
   if (data) return data;

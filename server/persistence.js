@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { createSupabaseClient } from '../src/services/supabaseClient.js';
 import { DEFAULT_RUNTIME_SETTINGS, normalizeRuntimeSettings } from '../src/config/runtimeSettings.js';
 import { scoreBucket } from '../src/utils/scoring.js';
@@ -170,6 +171,40 @@ async function fetchBacktestRowsByResultIds(supabase, ids) {
 
 function cloneSettings(settings) {
   return JSON.parse(JSON.stringify(settings));
+}
+
+async function readAlphaEngineSignalFeed(limit = 100) {
+  const feedPath = process.env.ALPHA_ENGINE_SIGNAL_FEED_PATH?.trim();
+
+  if (!feedPath) {
+    return null;
+  }
+
+  const raw = await readFile(feedPath, 'utf-8');
+  const parsed = JSON.parse(raw);
+  const rows = Array.isArray(parsed) ? parsed : parsed?.signals || [];
+
+  return rows
+    .map((row, index) => ({
+      id: row.id ?? row.signal_id ?? `alpha-engine-${index}`,
+      created_at: row.created_at ?? row.closed_at ?? new Date().toISOString(),
+      symbol: row.symbol,
+      alert_type: row.alert_type ?? 'signal_new',
+      direction: row.direction ?? 'bull',
+      quality: Number(row.quality ?? row.score ?? 0),
+      trend: row.trend ?? row.state ?? 'neutral',
+      position_pct: row.position_pct ?? row.risk_reward ?? null,
+      price: row.price ?? row.entry_price ?? null,
+      message: row.message ?? '',
+      signal_id: row.signal_id ?? null,
+      strategy_id: row.strategy_id ?? null,
+      state: row.state ?? null,
+      pnl: row.pnl ?? null,
+      close_reason: row.close_reason ?? null,
+      closed_at: row.closed_at ?? null,
+    }))
+    .sort((left, right) => new Date(right.created_at) - new Date(left.created_at))
+    .slice(0, limit);
 }
 
 export function createPersistenceLayer() {
@@ -634,6 +669,11 @@ export function createPersistenceLayer() {
     },
 
     async getAlphaSignals(limit = 100) {
+      const feedRows = await readAlphaEngineSignalFeed(limit);
+      if (feedRows !== null) {
+        return feedRows;
+      }
+
       if (!supabase) {
         return [];
       }

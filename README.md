@@ -27,6 +27,7 @@ Copy `.env.example` to `.env` and fill what you need.
 - If you do not have a VPS yet, set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel and let the frontend call Supabase Edge Functions directly.
 - `BINANCE_SYMBOL_LIMIT` is useful for faster local development.
 - `BINANCE_REQUESTS_PER_SECOND` defaults to `4` to stay conservative on REST limits.
+- `ALPHA_ENGINE_SIGNAL_FEED_PATH` is optional and lets the `/alpha` page read a JSON feed exported from Alpha-engine.
 
 ## Deployment Shape
 

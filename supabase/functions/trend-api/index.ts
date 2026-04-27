@@ -5,9 +5,13 @@ import {
   buildBacktestReport,
   createAdminClient,
   getAppState,
+  listAlphaStrategySpecs,
   getLatestScanResults,
   getLatestSymbolOverview,
+  queueAlphaStrategyBacktest,
   getRuntimeSettings,
+  queueAlphaStrategyApply,
+  saveAlphaStrategySpec,
   updateRuntimeSettings,
 } from '../_shared/db.ts';
 import { runBacktest, runScan } from '../_shared/jobs.ts';
@@ -320,6 +324,31 @@ Deno.serve(async (request) => {
           days: body.days != null ? Number(body.days) : settings.backtest.reportDaysDefault,
         }),
       );
+    }
+
+    if (action === 'alpha-strategies-list') {
+      return json(await listAlphaStrategySpecs(admin));
+    }
+
+    if (action === 'save-alpha-strategy') {
+      const fileName = String(body.fileName || '').trim();
+      const spec = body.spec && typeof body.spec === 'object' ? body.spec : null;
+      if (!fileName || !spec) {
+        return json({ error: 'fileName and spec are required' }, { status: 400 });
+      }
+      return json(await saveAlphaStrategySpec(admin, fileName, spec as Record<string, unknown>));
+    }
+
+    if (action === 'apply-alpha-strategies') {
+      return json(await queueAlphaStrategyApply(admin, 'trend-api'));
+    }
+
+    if (action === 'run-alpha-strategy-backtest') {
+      const fileName = String(body.fileName || '').trim();
+      if (!fileName) {
+        return json({ error: 'fileName is required' }, { status: 400 });
+      }
+      return json(await queueAlphaStrategyBacktest(admin, fileName, 'trend-api'));
     }
 
     if (action === 'run-backtest') {

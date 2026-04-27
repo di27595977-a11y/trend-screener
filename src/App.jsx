@@ -1,25 +1,27 @@
 import { NavLink, Route, Routes } from 'react-router-dom';
-import Dashboard from './components/Dashboard';
-import ChartDetail from './components/ChartDetail';
-import BacktestReport from './components/BacktestReport';
-import AlphaSignals from './components/AlphaSignals';
-import WinRateCalculator from './components/WinRateCalculator';
-import CryptoAnalyzer from './components/CryptoAnalyzer';
 import AlertScanner from './components/AlertScanner';
+import AlphaSignals from './components/AlphaSignals';
+import AlphaStrategyConsole from './components/AlphaStrategyConsole';
+import BacktestReport from './components/BacktestReport';
+import ChartDetail from './components/ChartDetail';
+import CryptoAnalyzer from './components/CryptoAnalyzer';
+import Dashboard from './components/Dashboard';
 import RangeSignalsPage from './components/RangeSignalsPage';
+import WinRateCalculator from './components/WinRateCalculator';
 
 const COPY = {
-  eyebrow: '趨勢篩選器',
-  title: '從幾百個幣裡快速挑出值得打開圖看的候選',
+  eyebrow: '趨勢交易控制台',
+  title: '把掃描、回測、Alpha 訊號和策略控制收進同一個操作台',
   description:
-    '程式負責掃描、評分與畫線，人眼負責最終判斷，幫你在 Binance USDT-M 合約市場裡更快找到圖形乾淨、穩定上升的標的。',
-  dashboard: '儀表板',
-  backtest: '回測報告',
-  alpha: '即時訊號',
-  winrate: '勝率計算',
-  analyzer: '多空分析',
-  alerts: '推播掃描',
-  range: '區間偵測',
+    '先用趨勢面板把市場看清楚，再用策略控制台管理 Alpha 策略規格，最後把真正的 paper trading 交給 Alpha 交易核心。',
+  dashboard: '總覽',
+  backtest: '回測',
+  alpha: 'Alpha 訊號',
+  strategy: '策略控制',
+  winrate: '勝率',
+  analyzer: '分析',
+  alerts: '警報',
+  range: '區間',
 };
 
 function AppNavLink({ to, children, end = false }) {
@@ -55,12 +57,13 @@ function AppShell({ children }) {
             <p className="mt-2 max-w-3xl text-sm text-slate-300 sm:text-base">{COPY.description}</p>
           </div>
 
-          <nav className="grid grid-cols-6 gap-3 sm:flex sm:flex-wrap">
+          <nav className="grid grid-cols-4 gap-3 sm:flex sm:flex-wrap">
             <AppNavLink end to="/">
               {COPY.dashboard}
             </AppNavLink>
             <AppNavLink to="/backtest">{COPY.backtest}</AppNavLink>
             <AppNavLink to="/alpha">{COPY.alpha}</AppNavLink>
+            <AppNavLink to="/strategy">{COPY.strategy}</AppNavLink>
             <AppNavLink to="/winrate">{COPY.winrate}</AppNavLink>
             <AppNavLink to="/analyzer">{COPY.analyzer}</AppNavLink>
             <AppNavLink to="/alerts">{COPY.alerts}</AppNavLink>
@@ -82,6 +85,7 @@ export default function App() {
         <Route path="/chart/:symbol" element={<ChartDetail />} />
         <Route path="/backtest" element={<BacktestReport />} />
         <Route path="/alpha" element={<AlphaSignals />} />
+        <Route path="/strategy" element={<AlphaStrategyConsole />} />
         <Route path="/winrate" element={<WinRateCalculator />} />
         <Route path="/analyzer" element={<CryptoAnalyzer />} />
         <Route path="/alerts" element={<AlertScanner />} />

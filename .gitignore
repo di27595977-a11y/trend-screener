@@ -20,6 +20,9 @@ server/ml/saved_model/
 server/ml/scaler.json
 server/ml/model_metrics.json
 
+# Supabase temp files
+supabase/.temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -30,3 +33,5 @@ server/ml/model_metrics.json
 *.njsproj
 *.sln
 *.sw?
+
+.vercel

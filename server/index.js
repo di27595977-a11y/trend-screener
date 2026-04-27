@@ -2,6 +2,7 @@ import cors from 'cors';
 import cron from 'node-cron';
 import dotenv from 'dotenv';
 import express from 'express';
+import { applyAlphaStrategies, listAlphaStrategies, runAlphaStrategyBacktest, saveAlphaStrategy } from './alphaStrategyApi.js';
 import { BacktestJob } from './backtestJob.js';
 import { createPersistenceLayer } from './persistence.js';
 import { ScanJob, fetchCandles, fetchTradableSymbols } from './scanJob.js';
@@ -140,6 +141,40 @@ app.get('/api/alpha-signals', async (request, response, next) => {
     const limit = Math.min(Number.parseInt(request.query.limit || '100', 10), 500);
     const signals = await persistence.getAlphaSignals(limit);
     response.json(signals);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/alpha-strategies', async (_request, response, next) => {
+  try {
+    response.json(await listAlphaStrategies());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put('/api/alpha-strategies/:fileName', async (request, response, next) => {
+  try {
+    const fileName = decodeURIComponent(request.params.fileName || '');
+    response.json(await saveAlphaStrategy(fileName, request.body?.spec || {}));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/alpha-strategies/apply', async (_request, response, next) => {
+  try {
+    response.json(await applyAlphaStrategies());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/alpha-strategies/:fileName/backtest', async (request, response, next) => {
+  try {
+    const fileName = decodeURIComponent(request.params.fileName || '');
+    response.json(await runAlphaStrategyBacktest(fileName));
   } catch (error) {
     next(error);
   }
